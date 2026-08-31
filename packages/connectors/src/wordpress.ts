@@ -13,11 +13,15 @@ export interface WpCredentials {
 
 export type SeoPlugin = 'yoast' | 'rankmath' | null;
 
+export const SEO_AUDIT_NS = 'seo-audit/v1';
+
 export interface WpConnectionInfo {
   ok: boolean;
   restBase: string;
   types: string[];
   seoPlugin: SeoPlugin;
+  /** True when the SEO Audit Connector plugin is installed (preferred integration path). */
+  connectorPlugin?: boolean;
   /** Present when `ok` is false. */
   reason?: string;
 }
@@ -83,6 +87,23 @@ export function detectSeoPlugin(
   return null;
 }
 
+interface ConnectorPing {
+  ok?: boolean;
+  seo_plugin?: SeoPlugin;
+  types?: string[];
+  user?: { caps?: Record<string, boolean> };
+}
+
+/** Preferred path: the SEO Audit Connector plugin's own namespace (works even if wp/v2 is locked). */
+async function connectorPing(
+  creds: WpCredentials,
+  opts: WpClientOptions,
+): Promise<{ status: number; body: ConnectorPing | null }> {
+  return wpGet<ConnectorPing>(creds, `/${SEO_AUDIT_NS}/ping`, opts).catch(
+    () => ({ status: 0, body: null }) as { status: number; body: null },
+  );
+}
+
 /** Epic 1.4 — test the connection: auth works, list content types, detect SEO plugin. */
 export async function testConnection(
   creds: WpCredentials,
@@ -96,6 +117,25 @@ export async function testConnection(
     seoPlugin: null,
     reason,
   });
+
+  // 0) Prefer the companion plugin's endpoint — it also fixes the Authorization header.
+  const ping = await connectorPing(creds, opts);
+  if (ping.status === 200 && ping.body?.ok) {
+    return {
+      ok: true,
+      restBase,
+      types: ping.body.types ?? [],
+      seoPlugin: ping.body.seo_plugin ?? null,
+      connectorPlugin: true,
+    };
+  }
+  if (ping.status === 401 || ping.status === 403) {
+    // Plugin is installed but auth failed — the message is unambiguous here.
+    return fail(
+      'Pluginul SEO Audit Connector e instalat, dar autentificarea a fost respinsă. ' +
+        'Regenerează parola din Setări → SEO Audit și verifică utilizatorul.',
+    );
+  }
 
   // 1) Is the REST API reachable at all (unauthenticated)?
   let root: { status: number; body: { name?: string; code?: string } | null };
@@ -131,8 +171,8 @@ export async function testConnection(
     const code = (me.body as { code?: string } | null)?.code;
     if (code === 'rest_not_logged_in' || code === 'rest_login_required') {
       return fail(
-        'Header-ul Authorization nu ajunge la WordPress. Adaugă în .htaccess: ' +
-          'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1  (sau CGIPassAuth On).',
+        'Header-ul Authorization nu ajunge la WordPress. Instalează pluginul „SEO Audit Connector" ' +
+          '(îl repară automat) sau adaugă în .htaccess: SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1.',
       );
     }
     return fail(
@@ -197,12 +237,26 @@ export function metaKeysFor(seoPlugin: SeoPlugin): { title: string; description:
   return { title: '_seo_tool_title', description: '_seo_tool_metadesc' };
 }
 
-/** Epic 6.3 — resolve a crawled URL to a WP object via its slug. */
+/** Epic 6.3 — resolve a crawled URL to a WP object. Prefers the connector plugin. */
 export async function resolveObject(
   creds: WpCredentials,
   url: string,
   opts: WpClientOptions = {},
 ): Promise<{ type: 'post' | 'page'; id: number; slug: string } | null> {
+  // Preferred: the companion plugin (does a real url_to_postid()).
+  const viaPlugin = await wpGet<{ id?: number; type?: string; slug?: string }>(
+    creds,
+    `/${SEO_AUDIT_NS}/resolve?url=${encodeURIComponent(url)}`,
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+  if (viaPlugin.status === 200 && viaPlugin.body?.id) {
+    return {
+      type: viaPlugin.body.type === 'page' ? 'page' : 'post',
+      id: viaPlugin.body.id,
+      slug: viaPlugin.body.slug ?? '',
+    };
+  }
+
   let slug: string;
   try {
     const path = new URL(url).pathname.replace(/\/+$/, '');
@@ -249,6 +303,36 @@ export async function applyFix(
   target: FixTarget,
   opts: WpClientOptions = {},
 ): Promise<ApplyResult> {
+  // Preferred: the companion plugin's /apply (works when wp/v2 writes are blocked).
+  const pluginBody =
+    target.kind === 'alt'
+      ? { kind: 'alt', media_id: target.mediaId, alt_text: target.altText }
+      : {
+          kind: 'meta',
+          object_type: target.objectType,
+          object_id: target.objectId,
+          ...(target.metaTitle !== undefined ? { meta_title: target.metaTitle } : {}),
+          ...(target.metaDescription !== undefined
+            ? { meta_description: target.metaDescription }
+            : {}),
+        };
+  const viaPlugin = await wpPatch<{ applied?: boolean; previous?: Record<string, unknown> }>(
+    creds,
+    `/${SEO_AUDIT_NS}/apply`,
+    pluginBody,
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+  if (viaPlugin.status === 200 && viaPlugin.body?.applied) {
+    return { applied: true, previous: viaPlugin.body.previous ?? {} };
+  }
+  if (viaPlugin.status === 403) {
+    return {
+      applied: false,
+      previous: {},
+      reason: 'Userul nu are permisiuni suficiente (edit_posts / upload_files).',
+    };
+  }
+
   if (target.kind === 'alt') {
     const cur = await wpGet<{ alt_text?: string }>(
       creds,
@@ -303,6 +387,23 @@ export async function rollbackFix(
   saved: { kind: 'meta' | 'alt'; objectType?: 'post' | 'page'; objectId?: number; mediaId?: number; previous: Record<string, unknown> },
   opts: WpClientOptions = {},
 ): Promise<{ applied: boolean }> {
+  // Preferred: the companion plugin's /rollback.
+  const viaPlugin = await wpPatch<{ rolled_back?: boolean }>(
+    creds,
+    `/${SEO_AUDIT_NS}/rollback`,
+    {
+      kind: saved.kind,
+      object_type: saved.objectType,
+      object_id: saved.objectId,
+      media_id: saved.mediaId,
+      previous: saved.previous,
+    },
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+  if (viaPlugin.status === 200 && viaPlugin.body?.rolled_back) {
+    return { applied: true };
+  }
+
   if (saved.kind === 'alt' && saved.mediaId != null) {
     const res = await wpPatch(
       creds,

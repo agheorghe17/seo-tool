@@ -32,3 +32,6 @@ coverage/
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# built WordPress plugin bundle (rebuild from wordpress-plugin/)
+wordpress-plugin/*.zip

@@ -101,10 +101,31 @@ describe('WordPress client (fixture server)', () => {
 
   afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
-  it('testConnection succeeds and detects Yoast', async () => {
+  it('testConnection succeeds and detects Yoast (wp/v2 fallback path)', async () => {
     const info = await testConnection(creds());
     expect(info).toMatchObject({ ok: true, seoPlugin: 'yoast' });
     expect(info.types).toEqual(expect.arrayContaining(['post', 'page']));
+  });
+
+  it('testConnection prefers the SEO Audit Connector plugin when present', async () => {
+    const withPlugin = createServer((req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if ((req.url ?? '').startsWith('/wp-json/seo-audit/v1/ping')) {
+        res.end(JSON.stringify({ ok: true, seo_plugin: 'rankmath', types: ['post', 'page', 'product'] }));
+      } else {
+        res.statusCode = 404;
+        res.end('{}');
+      }
+    });
+    return new Promise<void>((resolve) => {
+      withPlugin.listen(0, async () => {
+        const base = `http://127.0.0.1:${(withPlugin.address() as AddressInfo).port}`;
+        const info = await testConnection({ siteUrl: base, username: 'admin', applicationPassword: 'x' });
+        expect(info).toMatchObject({ ok: true, seoPlugin: 'rankmath', connectorPlugin: true });
+        expect(info.types).toContain('product');
+        withPlugin.close(() => resolve());
+      });
+    });
   });
 
   it('reports rejected auth', async () => {
