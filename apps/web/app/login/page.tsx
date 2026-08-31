@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Card } from '@/components/ui';
 
+export const dynamic = 'force-dynamic';
+
 function LoginForm() {
   const supabase = createClient();
   const router = useRouter();

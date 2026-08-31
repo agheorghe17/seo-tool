@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import { Nav } from '@/components/Nav';
 import { createClient } from '@/lib/supabase/server';
 
+// Everything under (app) is per-user, auth-gated data — never prerender it.
+export const dynamic = 'force-dynamic';
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
   const {

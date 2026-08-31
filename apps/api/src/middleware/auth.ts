@@ -1,9 +1,11 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { db, users } from 'db';
 import { getEnv } from '../env.js';
 
 /**
- * Verifies the Supabase access token (Bearer) and attaches `userId` to the request.
+ * Verifies the Supabase access token (Bearer), attaches `userId`, and lazily provisions
+ * the matching `public.users` row on first request (so FKs to users always resolve).
  *
  * Two verification paths:
  *  - `SUPABASE_JWT_SECRET` set  → HS256 symmetric verification (legacy Supabase JWTs)
@@ -16,12 +18,24 @@ declare module 'fastify' {
 }
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+const provisioned = new Set<string>();
 
 function getJwks(supabaseUrl: string) {
   if (!jwks) {
     jwks = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`));
   }
   return jwks;
+}
+
+async function ensureUserRow(userId: string, payload: JWTPayload): Promise<void> {
+  if (provisioned.has(userId)) return;
+  const email = typeof payload.email === 'string' ? payload.email : `${userId}@users.noreply`;
+  try {
+    await db.insert(users).values({ id: userId, email }).onConflictDoNothing();
+    provisioned.add(userId);
+  } catch {
+    /* if the DB is briefly unavailable, retry provisioning on the next request */
+  }
 }
 
 export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -33,18 +47,17 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
   const env = getEnv();
 
   try {
+    let payload: JWTPayload;
     if (env.SUPABASE_JWT_SECRET) {
       const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
-      const { payload } = await jwtVerify(token, secret);
-      req.userId = String(payload.sub);
-      return;
+      ({ payload } = await jwtVerify(token, secret));
+    } else if (env.SUPABASE_URL) {
+      ({ payload } = await jwtVerify(token, getJwks(env.SUPABASE_URL)));
+    } else {
+      return reply.code(500).send({ error: 'auth not configured' });
     }
-    if (env.SUPABASE_URL) {
-      const { payload } = await jwtVerify(token, getJwks(env.SUPABASE_URL));
-      req.userId = String(payload.sub);
-      return;
-    }
-    return reply.code(500).send({ error: 'auth not configured' });
+    req.userId = String(payload.sub);
+    await ensureUserRow(req.userId, payload);
   } catch {
     return reply.code(401).send({ error: 'invalid token' });
   }
