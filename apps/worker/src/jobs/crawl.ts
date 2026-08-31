@@ -106,13 +106,14 @@ export async function handleCrawl(job: PgBoss.Job<CrawlJob>, boss: PgBoss): Prom
       }
 
       if (ev.type === 'done') {
+        // Crawl phase done, but the pipeline continues (enrich → score → recommend → estimate).
+        // Keep the crawl "running" ("partial" only if pages errored); `estimate` sets "completed".
         await db
           .update(crawls)
           .set({
-            status: ev.status,
+            status: ev.status === 'partial' ? 'partial' : 'running',
             pagesScanned: ev.scanned,
             pagesRendered: rendered,
-            completedAt: new Date(),
           })
           .where(eq(crawls.id, crawlId));
         // Epic 10.3 — count scanned pages against the user's monthly quota.

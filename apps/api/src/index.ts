@@ -28,6 +28,22 @@ await app.register(cors, {
   credentials: true,
 });
 
+// Tolerate `content-type: application/json` with an empty body (DELETE / bodyless POST).
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'string' },
+  (_req, body, done) => {
+    const s = (body as string).trim();
+    if (s === '') return done(null, {});
+    try {
+      done(null, JSON.parse(s));
+    } catch (err) {
+      (err as { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  },
+);
+
 // Epic 10.4 — per-user (falls back to IP) rate limiting. In-memory; swap for a Redis
 // store when running more than one API instance.
 await app.register(rateLimit, {

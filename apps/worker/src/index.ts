@@ -65,6 +65,10 @@ async function recordRun<T>(
 
 async function main(): Promise<void> {
   await boss.start();
+  // pg-boss v10 requires queues to exist before work()/send(). Idempotent.
+  for (const type of JOB_TYPES) {
+    await boss.createQueue(type);
+  }
   await sweepStaleCrawls();
   setInterval(() => void sweepStaleCrawls(), 60 * 60 * 1000).unref();
 

@@ -1,5 +1,5 @@
 import PgBoss from 'pg-boss';
-import type { JobType } from 'shared';
+import { JOB_TYPES, type JobType } from 'shared';
 import { getEnv } from './env.js';
 
 /**
@@ -13,6 +13,10 @@ export async function getQueue(): Promise<PgBoss> {
   boss = new PgBoss({ connectionString: getEnv().DATABASE_URL });
   boss.on('error', (err) => console.error('[pg-boss]', err));
   await boss.start();
+  // pg-boss v10 requires queues to exist before send(). Idempotent.
+  for (const type of JOB_TYPES) {
+    await boss.createQueue(type);
+  }
   return boss;
 }
 

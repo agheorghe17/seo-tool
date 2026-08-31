@@ -17,7 +17,9 @@ export async function apiFetch<T>(
   const res = await fetch(`${BASE}${path}`, {
     ...rest,
     headers: {
-      'content-type': 'application/json',
+      // Only declare a JSON body when we actually send one — Fastify rejects
+      // `content-type: application/json` with an empty body.
+      ...(rest.body != null ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...rest.headers,
     },
