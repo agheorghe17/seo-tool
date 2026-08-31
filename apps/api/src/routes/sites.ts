@@ -184,9 +184,14 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
         },
       });
 
+    // Authenticating as a WordPress user that can edit content proves ownership → auto-verify.
     const [updated] = await db
       .update(sites)
-      .set({ connectionType: 'wordpress', wpSiteUrl: parsed.data.wpSiteUrl })
+      .set({
+        connectionType: 'wordpress',
+        wpSiteUrl: parsed.data.wpSiteUrl,
+        verifiedAt: site.verifiedAt ?? new Date(),
+      })
       .where(eq(sites.id, site.id))
       .returning();
 

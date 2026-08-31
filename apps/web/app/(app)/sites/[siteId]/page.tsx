@@ -44,7 +44,7 @@ export default function SitePage() {
         title={site.domain}
         subtitle={site.connectionType === 'wordpress' ? 'WordPress conectat' : 'Site universal'}
         actions={
-          site.verified ? (
+          site.verified || site.wpSiteUrl ? (
             <Button
               disabled={startCrawl.isPending || site.lastCrawl?.status === 'running'}
               onClick={() => startCrawl.mutate()}
@@ -61,7 +61,7 @@ export default function SitePage() {
         </p>
       )}
 
-      {!site.verified && (
+      {!site.verified && !site.wpSiteUrl && (
         <Card>
           <h2 className="font-medium">Verifică proprietatea</h2>
           <p className="mt-1 text-sm text-neutral-500">
