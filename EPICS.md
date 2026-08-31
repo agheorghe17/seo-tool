@@ -230,3 +230,78 @@ Epic 12 la final.
 ```
 
 Traseu critic: **0 → 9 → 2 → 3 → 4 → 5**. Epic 1 poate merge în paralel cu 9. Epic 6 și 7 se ramifică din 5/4.
+
+---
+---
+
+# Modul Strategie de Keywords & Competitori (Epics 13-19)
+
+> Adăugat peste audit. Răspunde la: pe ce rankez, ce să țintesc pentru afacerea mea, unde stau
+> față de competitori, ce fac în 30/60/90 zile. Explicat pentru cineva care nu știe SEO.
+> Nimic nu cere un API plătit ca să funcționeze; SERP-ul plătit e strict opțional.
+
+## Epic 13 — Profil de business & conectori de date
+- [x] **13.1** Tabele `business_profiles`, `competitors`, `competitor_pages`, `keyword_clusters`, `rank_snapshots`, `serp_results`, `keyword_playbooks`, `roadmap_items` + coloane strategie pe `keyword_data` (intent, cluster_id, business_relevance, competition, opportunity_score, bucket, has_target_page, expansion_source, gl/hl); migrații `0002_strategy` + `0003_strategy_uq`; RLS „owner via site"
+- [x] **13.2** `connectors/autocomplete.ts` — Google Suggest (fără cheie), `expandSeeds` cu drilling pe alfabet
+- [x] **13.3** `connectors/keywordplanner.ts` — Google Ads `KeywordPlanIdeaService` (volum + competiție + idei); degradare grațioasă fără `GOOGLE_ADS_DEVELOPER_TOKEN`
+- [x] **13.4** `connectors/serp/` — `SerpProvider` iface + `SERP_PROVIDER` env; adaptor `dataforseo` complet, schițe `serpapi`/`scaleserp`/`valueserp`; `none` implicit → SERP no-op
+- [x] **13.5** Job `profile-extract` — LLM (sau euristic pe paginile crawl-uite) → `business_profiles` draft; `GET/PUT /api/sites/:id/profile`
+- [x] **13.6** `POST/GET/DELETE /api/sites/:id/competitors` — adăugare manuală, normalizare domeniu, anti-duplicat; adăugarea pune un `competitor-crawl`
+- **Gata când:** un site are profil editabil auto-populat + listă de competitori manuală. *Gata.*
+
+## Epic 14 — Univers de cuvinte cheie
+- [x] **14.1** `packages/strategy` (pur) + `intent.ts` (euristic RO/EN cu fold de diacritice → informational/commercial/transactional/navigational/local/unknown)
+- [x] **14.2** `strategy/cluster.ts` — grupare pe topicuri (componente conexe pe token-uri semnificative, pillar = volum/lungime)
+- [x] **14.3** `strategy/relevance.ts` — scor 0-100 relevanță keyword vs profil (overlap servicii/locații)
+- [x] **14.4** Job `keyword-research` — seed-uri (LLM/euristic) → autocomplete + Keyword Planner + related SERP → intent + cluster + relevanță → `keyword_data` + `keyword_clusters`; pune `rank-import`
+- [x] **14.5** `GET /api/sites/:id/keywords` cu filtre (cluster/bucket/intent/rank) + total + paginare
+- **Gata când:** pentru „agenție marketing România" se generează câteva sute de cuvinte clasificate pe intenție/clustere. *Gata (291 kw / 40 clustere pe test real).*
+
+## Epic 15 — Rankinguri reale (GSC) & poziționare
+- [x] **15.1** `gsc.fetchSearchAnalytics` cu `dimensions:['query','page']`, 180 zile
+- [x] **15.2** Job `rank-import` — GSC → `rank_snapshots` + `keyword_data.currentPosition`; **plus** matching keyword→pagină proprie prin similaritate (funcționează și fără GSC)
+- [x] **15.3** `strategy/striking.ts` — poz 5-20 + impresii → `bucket='quick_win'`; detectare canibalizare (2+ pagini pe același query)
+- [x] **15.4** `GET /api/keywords/:kwId/rank-history`
+- **Gata când:** utilizatorul vede ce rankează, pe ce poziție și pe ce pagină + striking distance. *Gata; striking/quick_win necesită GSC conectat.*
+
+## Epic 16 — Analiză competitori (crawl, fără API plătit)
+- [x] **16.1** Job `competitor-crawl` — `crawlSite` refolosit (cap `COMPETITOR_CRAWL_MAX_PAGES`) → `competitor_pages` + `target_keyword_guess`; pune `strategy-build` (rescore)
+- [x] **16.2** `strategy/target-keyword.ts` — ghicește keyword-ul țintă al unei pagini (title n-grams + slug + H1)
+- [x] **16.3** `strategy/gap.ts` `clusterCoverage` — „ai N pagini / competitorul are M" per cluster
+- [x] **16.4** `pageContentGap` — headings/word count/schema pe care competitorul le are și tu nu
+- [x] **16.5** `GET /api/sites/:id/competitors/:cId/gap`
+- **Gata când:** pe fiecare competitor adăugat, vezi pe ce clustere e mai puternic și ce-ți lipsește. *Gata.*
+
+## Epic 17 — Scor de oportunitate & plan de acțiune ghidat
+- [x] **17.1** `strategy/opportunity.ts` — `score = volum_norm × relevanță × achievability × page_factor`; volum `null` = necunoscut (neutru), nu „fără cerere"; bucketing quick_win / build_content / long_game care merge și fără date de poziție/volum
+- [x] **17.2** `GET /api/sites/:id/opportunities` grupat pe bucket
+- [x] **17.3** Job `strategy-build` — opportunity pe tot universul + content-gap + LLM → `keyword_playbooks` (brief + checklist specific per keyword) + `roadmap_items` 30/60/90; fallback determinist
+- [x] **17.4** Prompturi stricte (fără promisiuni de poziție/trafic); test `strategy` blochează frazele „locul 1 garantat"
+- [x] **17.5** `GET /api/sites/:id/roadmap` + `PATCH /api/roadmap/:itemId`; `GET /api/sites/:id/strategy/overview` (KPI)
+- **Gata când:** fiecare cuvânt prioritar are playbook concret; roadmap 30/60/90 cu „de ce" simplu. *Gata (5 items / 15 playbooks pe test).*
+
+## Epic 18 — Dashboard „Strategie" (UX pentru non-SEO)
+- [x] **18.1** Rută `/(app)/sites/[siteId]/strategy` + link din pagina site-ului; `SeoTermTooltip` (glosar RO pe fiecare termen)
+- [x] **18.2** `ProfileWizard` (prima dată) — confirmă servicii/orașe + adaugă competitori → rebuild
+- [x] **18.3** Tab „Prezentare" — narativ în limbaj simplu + 4 KPI + „Următoarea acțiune"
+- [x] **18.4** Tab „Cuvinte cheie" — tabel filtrabil (rank status / bucket) + `KeywordDetail` drawer (`RankHistoryChart`, top 10 SERP, playbook checklist)
+- [x] **18.5** Tab „Oportunități" — board 3 coloane (câștig rapid / de creat conținut / termen lung)
+- [x] **18.6** Tab „Competitori" — adăugare + tabel content-gap pe clustere
+- [x] **18.7** Tab „Plan 30/60/90" — roadmap cu bife + „de ce contează"
+- [x] **18.8** Stări goale ghidate
+- **Gata când:** un om care nu știe SEO deschide „Strategie" și înțelege unde stă, ce să țintească, ce face săptămâna asta. *Gata; `web build` OK (12 rute).*
+
+## Epic 19 — Tracking în timp & progres
+- [x] **19.1** Job `rank-refresh` — `rank-import` + `serp-fetch` + `strategy-build` (rescore); raportează mișcările de poziție (urcat/coborât ≥ 2)
+- [x] **19.2** `strategy-weekly` — job programat pg-boss (`RANK_REFRESH_CRON`, implicit luni 06:00) care face fan-out `rank-refresh` per site cu profil confirmat
+- [~] **19.3** Digest lunar pe email — hook `sendCrawlDoneEmail` există; digest dedicat: de adăugat
+- [x] **19.4** `RankHistoryChart` pe `KeywordDetail`; KPI „cuvinte în top 10" + trend pe Overview
+- [x] **19.5** Progres roadmap — `roadmapDone/roadmapTotal` în overview + bife în UI
+- **Gata când:** pozițiile se reîmprospătează automat săptămânal + evoluție vizibilă. *Gata; SERP-ul din tracking necesită `SERP_PROVIDER`.*
+
+## Note de rulare (modul Strategie)
+- Fără nimic în plus: universul se face din **autocomplete + matching pe paginile tale**; competitorii din **crawl**. Toate oportunitățile ies `build_content` (nu avem poziții) — corect și onest.
+- **GSC conectat** → apar `quick_win` (striking distance), poziții reale, istoric.
+- **`GOOGLE_ADS_DEVELOPER_TOKEN`** → volum de căutare pe cuvinte, prioritizare mai bună.
+- **`SERP_PROVIDER=dataforseo|serpapi|…` + cheie** → poziții live față de competitori, „cine e în top 10".
+- **`LLM_PROVIDER=anthropic|ollama`** → profil, briefuri și narativ mult mai bune (altfel: fallback determinist).

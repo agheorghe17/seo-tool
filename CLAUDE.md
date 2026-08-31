@@ -57,9 +57,10 @@ packages/
   shared/      tipuri + utilitare pure (crypto AES-256-GCM, curbe CTR, matematica scorului/priorității)
   scoring/     catalog de reguli + motor de scoring + fix catalog (PUR, fără I/O, unit-tested)
   crawler/     fetch static (undici), sitemap, robots.txt, extractor (cheerio), render (playwright-core)
-  llm/         `explainIssue()` provider-agnostic + adaptoare anthropic | ollama | none + guardrail + cache
+  llm/         `explainIssue()` + `completeJson()` provider-agnostic + adaptoare anthropic | ollama | none + guardrail + cache
   estimator/   estimare de trafic ca INTERVAL (impact × ramp-up), pur, testat
-  connectors/  wordpress | gsc | psi | crux | dataforseo (flagged) | cache
+  strategy/    PUR — intent, clustering, relevanță, striking distance, target-keyword, content-gap, opportunity score
+  connectors/  wordpress | gsc | psi | crux | autocomplete | keywordplanner | serp/ (pluggable) | dataforseo | cache
   config/      preset-uri eslint / tsconfig / tailwind
 ```
 
@@ -111,10 +112,15 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Toate cele 12 epics implementate la nivel de cod + joburi + endpoints + teste (87 teste; type-check + lint + `web build` verzi).
-Ce rămâne = **verificare end-to-end pe un Postgres real** (creezi proiect Supabase, `.env`, `pnpm db:migrate`,
-`pnpm --filter db policies`), plus deploy cu chei proprii. Rafinamente opționale marcate `[~]` în `EPICS.md`
-(wizard onboarding, branding raport, store Redis pentru rate-limit, teste de izolare RLS).
+Epics 0-19 implementate — audit complet (0-12) + modul Strategie de keywords & competitori (13-19).
+Verificat end-to-end pe Supabase real: pipeline audit `crawl→enrich→score→recommend→estimate` și
+pipeline strategie `profile-extract→keyword-research→rank-import→competitor-crawl→strategy-build`.
+98 teste; type-check + lint + `web build` verzi.
 
-Migrații: `packages/db/migrations/` (`0000_init`, `0001_ops_tables` — 11 tabele). RLS: `packages/db/sql/policies.sql`.
+Modulul Strategie funcționează fără niciun API plătit (autocomplete + crawl competitori + matching pe
+paginile proprii). Se îmbogățește progresiv: GSC → poziții reale + striking distance; `GOOGLE_ADS_DEVELOPER_TOKEN`
+→ volum; `SERP_PROVIDER` + cheie → poziții live vs competitori; `LLM_PROVIDER` → profil/briefuri/narativ mai bune.
+
+Migrații: `packages/db/migrations/` (`0000_init` … `0003_strategy_uq` — 19 tabele). RLS: `packages/db/sql/policies.sql`.
 `pnpm --filter db build` rulează automat înainte de `db:generate` / `db:push` / `db:studio`.
+Job programat săptămânal: `strategy-weekly` (pg-boss, `RANK_REFRESH_CRON`).
