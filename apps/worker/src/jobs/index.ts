@@ -1,6 +1,9 @@
 import type PgBoss from 'pg-boss';
 import { logger } from '../logger.js';
 import { handleCrawl } from './crawl.js';
+import { handleEnrich } from './enrich.js';
+import { handleRender } from './render.js';
+import { handleScore } from './score.js';
 import type { JobPayloads } from './types.js';
 
 /**
@@ -22,9 +25,9 @@ const notImplemented =
 
 export const handlers: { [K in keyof JobPayloads]: Handler<K> } = {
   crawl: handleCrawl,
-  render: notImplemented('render'),
-  enrich: notImplemented('enrich'),
-  score: notImplemented('score'),
+  render: (job) => handleRender(job),
+  enrich: handleEnrich,
+  score: handleScore,
   recommend: notImplemented('recommend'),
   estimate: notImplemented('estimate'),
   'wp-apply': notImplemented('wp-apply'),

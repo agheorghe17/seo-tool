@@ -1,6 +1,7 @@
 import {
   SCORE_CATEGORIES,
   clampScore,
+  siteScore as siteScoreMath,
   weightedTotal,
   type CategoryScores,
   type CategoryWeights,
@@ -61,6 +62,62 @@ export function scorePage(
   };
 
   return { scores, issues };
+}
+
+export interface SiteFacts {
+  hasSitemap: boolean;
+  https: boolean;
+  robotsTxtOk: boolean;
+}
+
+export interface SiteScoreResult {
+  score: number;
+  /** Points subtracted from the mean page score. */
+  penalty: number;
+  issues: RuleIssue[];
+}
+
+/** Epic 4.7 — aggregate page totals into a site score, penalising site-level problems. */
+export function scoreSite(pageTotals: number[], facts: SiteFacts): SiteScoreResult {
+  const issues: RuleIssue[] = [];
+  let penalty = 0;
+
+  const add = (
+    id: string,
+    severity: RuleIssue['severity'],
+    p: number,
+    description: string,
+    fixTitle: string,
+    impactHint: number,
+    effortHint: number,
+  ) => {
+    penalty += p;
+    issues.push({
+      ruleId: id,
+      ruleVersion: 1,
+      category: 'technical',
+      severity,
+      description,
+      detectedValue: null,
+      siteLevel: true,
+      fixTitle,
+      impactHint,
+      effortHint,
+      penalty: p,
+    });
+  };
+
+  if (!facts.https) {
+    add('site.https', 'critical', 15, 'Site-ul nu servește integral prin HTTPS.', 'Activează HTTPS pe tot site-ul', 5, 3);
+  }
+  if (!facts.hasSitemap) {
+    add('site.sitemap', 'warning', 8, 'Nu a fost găsit un sitemap.xml valid.', 'Publică un sitemap.xml și trimite-l în Search Console', 4, 2);
+  }
+  if (!facts.robotsTxtOk) {
+    add('site.robots', 'warning', 5, 'robots.txt lipsește sau are probleme.', 'Adaugă un robots.txt corect', 3, 1);
+  }
+
+  return { score: siteScoreMath(pageTotals, penalty), penalty, issues };
 }
 
 export type { PageData };

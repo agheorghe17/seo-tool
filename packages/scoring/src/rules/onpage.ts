@@ -93,9 +93,35 @@ export const imageAltRule: Rule = {
   },
 };
 
+export const headingHierarchyRule: Rule = {
+  id: 'onpage.heading-hierarchy',
+  version: 1,
+  category: 'onpage',
+  severity: 'info',
+  fixTitle: 'Nu sări peste niveluri de heading (ex: H2 → H4)',
+  impactHint: 2,
+  effortHint: 2,
+  penalty: 10,
+  check(page) {
+    let prev = 0;
+    for (const h of page.headings) {
+      if (prev !== 0 && h.level > prev + 1) {
+        return {
+          passed: false,
+          description: `Ierarhie de headings inconsistentă (H${prev} → H${h.level}).`,
+          detectedValue: `H${prev}->H${h.level}`,
+        };
+      }
+      prev = h.level;
+    }
+    return { passed: true };
+  },
+};
+
 export const onpageRules: Rule[] = [
   titleLengthRule,
   metaDescriptionRule,
   singleH1Rule,
   imageAltRule,
+  headingHierarchyRule,
 ];

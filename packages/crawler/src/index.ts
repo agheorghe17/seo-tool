@@ -5,12 +5,13 @@ export * from './fetch.js';
 export * from './extract.js';
 export * from './ratelimit.js';
 export * from './crawl.js';
+export * from './render.js';
 
 import type { PageData } from 'shared';
 import { fetchStatic } from './fetch.js';
 import { extractPage } from './extract.js';
 
-/** Convenience: fetch one URL statically and extract it. Epic 3 adds a Playwright variant. */
+/** Convenience: fetch one URL statically and extract it. See `renderPage` for the JS variant. */
 export async function fetchAndExtract(url: string, userAgent: string): Promise<PageData> {
   const res = await fetchStatic(url, { userAgent });
   if (!res.isHtml) {
@@ -23,9 +24,4 @@ export async function fetchAndExtract(url: string, userAgent: string): Promise<P
     html: res.body,
     headers: res.headers,
   });
-}
-
-/** Epic 3.1 — headless render fallback for JS-heavy pages. */
-export async function renderPage(_url: string): Promise<PageData> {
-  throw new Error('not implemented — Epic 3.1');
 }

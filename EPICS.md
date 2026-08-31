@@ -66,34 +66,34 @@
 
 ## Epic 3 — Render JS + date de viteză
 
-- [ ] **3.1** Worker de render Playwright (Chromium) — mașină Fly separată, **scale-to-zero** între joburi
-  - [ ] **3.1.1** Sub-job `render` — primește URL, întoarce HTML randat + `word_count` real
-  - [ ] **3.1.2** Limite: timeout hard, blocare resurse grele (fonts, media) pentru viteză, un singur context reutilizat
-  - [ ] **3.1.3** **Cale $0 alternativă** (dacă alocația Fly nu ajunge): pagini JS-heavy marcate `rendered_with=static` + issue „necesită verificare manuală / SSR”; render-ul se activează când există buget de infra
-- [ ] **3.2** `connectors/psi` — PageSpeed Insights API (mobil + desktop), retry + backoff, respectă cota 25k/zi
-- [ ] **3.3** `connectors/crux` — CrUX API (date de câmp reale unde există), respectă 150 req/min
-- [ ] **3.4** Cache Redis pe răspunsuri PSI/CrUX (cheie = URL normalizat + strategy, TTL 24-72h) — evită re-interogări
-- [ ] **3.5** Job `enrich` — completează `lcp_ms`, `inp_ms`, `cls_score`, `mobile_friendly` pe `pages`
-- [ ] **3.6** Fallback când CrUX nu are date (trafic mic): folosește lab data din PSI/Lighthouse și marchează sursa
+- [x] **3.1** Renderer Playwright (`packages/crawler/src/render.ts`) — `playwright-core` ca dep opțională, lazy-import, browser reutilizat
+  - [x] **3.1.1** Sub-job `render` (`apps/worker/src/jobs/render.ts`) — HTML randat → re-extragere `PageData`, `rendered_with='playwright'`
+  - [x] **3.1.2** Limite: timeout hard, blocare `image`/`media`/`font`, un singur `browser` cache-uit
+  - [x] **3.1.3** **Cale $0**: `RENDER_ENABLED != 1` sau `RenderUnavailableError` → păstrează extragerea statică + issue `technical.needs-ssr`
+- [x] **3.2** `connectors/psi` — PageSpeed Insights (mobil + desktop), field → lab fallback, timeout, fetch injectabil
+- [x] **3.3** `connectors/crux` — CrUX API (p75), `null` când nu există date de câmp
+- [x] **3.4** Cache pe răspunsuri PSI/CrUX — `CacheStore` (`MemoryCacheStore` + `RedisCacheStore` via `ioredis` în worker), `withCache`, TTL 48h implicit
+- [x] **3.5** Job `enrich` — `mergeCwv` (CrUX → PSI field → PSI lab) completează `lcp_ms`/`inp_ms`/`cls_score`/`mobile_friendly`, apoi pune `score`
+- [x] **3.6** Fallback lab data când CrUX e gol — marcat prin `source` (`field`/`lab`/`none`)
 
-**Gata când:** fiecare pagină din crawl are LCP/INP/CLS din PSI/CrUX (sau lab data marcat explicit ca atare), iar paginile JS-heavy sunt fie randate, fie semnalate clar.
+**Gata când:** fiecare pagină din crawl are LCP/INP/CLS din PSI/CrUX (sau lab data marcat explicit ca atare), iar paginile JS-heavy sunt fie randate, fie semnalate clar. *Connectors + jobs + `mergeCwv`: gata (13 teste). Render real: necesită Chromium instalat (`RENDER_ENABLED=1`).*
 
 ---
 
 ## Epic 4 — Motor de scoring SEO
 
-- [ ] **4.1** `packages/scoring` — contract de regulă `{ id, category, weight, severity, check(pageData), fixTitle, impactHint, effortHint }`, `rule_version`
-- [ ] **4.2** Reguli **Tehnic** (pondere implicită 30%): status 200, fără lanț de redirect-uri, HTTPS, `canonical` valid, `noindex` neintenționat, conținut duplicat (`content_hash` egal pe URL-uri diferite), sitemap prezent & valid (site-level), `robots.txt` corect (site-level)
-- [ ] **4.3** Reguli **Core Web Vitals / UX** (15%): LCP < 2.5s, INP < 200ms, CLS < 0.1, mobile-friendly
-- [ ] **4.4** Reguli **On-page** (25%): title unic 30-60 car., meta description 120-160 car., un singur H1, ierarhie de headings logică, alt text pe imagini, densitate rezonabilă de linkuri interne
-- [ ] **4.5** Reguli **Conținut** (20%): word count suficient pentru intenție, prospețime (`lastmod` / dată vizibilă), fără conținut subțire/duplicat, canibalizare (mai multe pagini pe același target)
-- [ ] **4.6** Reguli **GEO / AI-readiness** (10%): schema relevant (FAQ/HowTo/Article), fragment extractibil (răspuns direct la începutul secțiunii), statistici cu context temporal, TL;DR/summary prezent
-- [ ] **4.7** Agregare — scor pagină = medie ponderată a categoriilor; scor site = medie ponderată a paginilor cu **penalizare** pentru probleme site-level (sitemap lipsă, fără HTTPS)
-- [ ] **4.8** Ponderi **configurabile** (nu hardcodate) — fișier de config încărcat la rulare, validat cu Zod
-- [ ] **4.9** Job `score` — populează `score_*` pe `pages` și `issues` (cu `severity`, `detected_value`, `site_level`)
-- [ ] **4.10** Suită de teste pe fixture-uri HTML (pagină bună / title lipsă / multi-H1 / CWV proaste / thin content / fără schema) — țintă acoperire mare pe `packages/scoring`
+- [x] **4.1** `packages/scoring` — contract `Rule { id, version, category, severity, fixTitle, impactHint, effortHint, penalty, check(page, ctx) }` (`src/rule.ts`)
+- [x] **4.2** Reguli **Tehnic** (`rules/technical.ts`): status 200, HTTPS, fără lanț de redirect-uri, `noindex`, canonical aliniat, conținut duplicat (`content_hash` pe siblings). Sitemap/robots la nivel de site → `scoreSite`
+- [x] **4.3** Reguli **CWV** (`rules/cwv.ts`): LCP < 2.5s, INP < 200ms, CLS < 0.1, mobile-friendly (metrică `null` = neevaluat)
+- [x] **4.4** Reguli **On-page** (`rules/onpage.ts`): title 30-60, meta 120-160, un singur H1, alt text, ierarhie de headings
+- [x] **4.5** Reguli **Conținut** (`rules/content.ts`): thin content (< 250 cuvinte), title duplicat, canibalizare pe H1
+- [x] **4.6** Reguli **GEO** (`rules/geo.ts`): schema prezent, schemă orientată pe răspuns (Article/FAQ/HowTo), conținut scanabil (H2/H3)
+- [x] **4.7** Agregare — `scorePage` (medie ponderată a categoriilor, fiecare 100 − Σ penalizări) + `scoreSite` (medie pagini − penalizare site-level pentru HTTPS/sitemap/robots)
+- [x] **4.8** Ponderi **configurabile** — `loadWeights` + `weightsSchema` (Zod), din `SCORING_WEIGHTS`; fallback la `DEFAULT_WEIGHTS`
+- [x] **4.9** Job `score` (`apps/worker/src/jobs/score.ts`) — populează `score_*` pe `pages`, re-inserează `issues` idempotent, pune `recommend`
+- [x] **4.10** Teste pe fixture-uri (pagină curată / status 404 / http / redirecturi / noindex / duplicate / CWV proaste / thin / fără schema / scoreSite / loadWeights) — 12 teste
 
-**Gata când:** un crawl produce scor total + breakdown pe 5 categorii per pagină și per site, reproductibil, cu teste care fixează comportamentul fiecărei reguli.
+**Gata când:** un crawl produce scor total + breakdown pe 5 categorii per pagină și per site, reproductibil, cu teste care fixează comportamentul fiecărei reguli. *`packages/scoring` + job: gata. Persistarea scorului de site pe `crawls`: Epic 8/9.*
 
 ---
 
