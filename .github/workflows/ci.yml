@@ -34,6 +34,9 @@ jobs:
 
       # Fails if the committed migrations are out of sync with the schema.
       - name: Drizzle schema/migration drift check
-        run: pnpm --filter db exec drizzle-kit generate --name ci-drift-check && git diff --exit-code packages/db/migrations
+        run: |
+          pnpm --filter db build
+          pnpm --filter db exec drizzle-kit generate --name ci-drift-check
+          git diff --exit-code packages/db/migrations
         env:
           DATABASE_URL_DIRECT: postgresql://user:pass@localhost:5432/db

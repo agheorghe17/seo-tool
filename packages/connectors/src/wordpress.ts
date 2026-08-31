@@ -119,19 +119,164 @@ export async function testConnection(
   return { ok: true, restBase, types, seoPlugin };
 }
 
-export interface ApplyMetaInput {
-  creds: WpCredentials;
-  objectType: 'post' | 'page' | 'media';
-  objectId: number;
-  fields: Partial<{ title: string; metaTitle: string; metaDescription: string; altText: string }>;
+async function wpPatch<T>(
+  creds: WpCredentials,
+  path: string,
+  body: unknown,
+  opts: WpClientOptions,
+): Promise<{ status: number; body: T | null }> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const res = await doFetch(`${restBaseFor(creds.siteUrl)}${path}`, {
+    method: 'POST', // WP REST accepts POST for updates
+    headers: {
+      authorization: authHeader(creds),
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  let parsed: T | null = null;
+  try {
+    parsed = (await res.json()) as T;
+  } catch {
+    parsed = null;
+  }
+  return { status: res.status, body: parsed };
 }
+
+/** SEO-plugin-specific post-meta keys for title / description. */
+export function metaKeysFor(seoPlugin: SeoPlugin): { title: string; description: string } {
+  if (seoPlugin === 'yoast') {
+    return { title: '_yoast_wpseo_title', description: '_yoast_wpseo_metadesc' };
+  }
+  if (seoPlugin === 'rankmath') {
+    return { title: 'rank_math_title', description: 'rank_math_description' };
+  }
+  // Fallback: our own meta. Needs a companion mu-plugin to render in <head>.
+  return { title: '_seo_tool_title', description: '_seo_tool_metadesc' };
+}
+
+/** Epic 6.3 — resolve a crawled URL to a WP object via its slug. */
+export async function resolveObject(
+  creds: WpCredentials,
+  url: string,
+  opts: WpClientOptions = {},
+): Promise<{ type: 'post' | 'page'; id: number; slug: string } | null> {
+  let slug: string;
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, '');
+    slug = decodeURIComponent(path.split('/').filter(Boolean).pop() ?? '');
+  } catch {
+    return null;
+  }
+  if (!slug) return null;
+
+  for (const type of ['posts', 'pages'] as const) {
+    const res = await wpGet<Array<{ id: number; slug: string }>>(
+      creds,
+      `/wp/v2/${type}?slug=${encodeURIComponent(slug)}&context=edit`,
+      opts,
+    );
+    if (Array.isArray(res.body) && res.body[0]) {
+      return { type: type === 'posts' ? 'post' : 'page', id: res.body[0].id, slug };
+    }
+  }
+  return null;
+}
+
+export type FixTarget =
+  | {
+      kind: 'meta';
+      objectType: 'post' | 'page';
+      objectId: number;
+      seoPlugin: SeoPlugin;
+      metaTitle?: string;
+      metaDescription?: string;
+    }
+  | { kind: 'alt'; mediaId: number; altText: string };
 
 export interface ApplyResult {
   applied: boolean;
+  /** Previous values, enough to reconstruct a rollback. */
   previous: Record<string, unknown>;
+  reason?: string;
 }
 
-/** Epic 6.4/6.5 — write a safe fix, returning the previous values for rollback. */
-export async function applyMeta(_input: ApplyMetaInput): Promise<ApplyResult> {
-  throw new Error('not implemented — Epic 6.4');
+/** Epic 6.4/6.5 — write one safe fix, returning previous values for rollback (Epic 6.6). */
+export async function applyFix(
+  creds: WpCredentials,
+  target: FixTarget,
+  opts: WpClientOptions = {},
+): Promise<ApplyResult> {
+  if (target.kind === 'alt') {
+    const cur = await wpGet<{ alt_text?: string }>(
+      creds,
+      `/wp/v2/media/${target.mediaId}?context=edit`,
+      opts,
+    );
+    if (cur.status !== 200) return { applied: false, previous: {}, reason: `media ${cur.status}` };
+    const res = await wpPatch<{ alt_text?: string }>(
+      creds,
+      `/wp/v2/media/${target.mediaId}`,
+      { alt_text: target.altText },
+      opts,
+    );
+    return {
+      applied: res.status >= 200 && res.status < 300,
+      previous: { alt_text: cur.body?.alt_text ?? '' },
+      reason: res.status >= 300 ? `patch ${res.status}` : undefined,
+    };
+  }
+
+  const keys = metaKeysFor(target.seoPlugin);
+  const endpoint = `/wp/v2/${target.objectType}s/${target.objectId}`;
+  const cur = await wpGet<{ meta?: Record<string, unknown> }>(
+    creds,
+    `${endpoint}?context=edit`,
+    opts,
+  );
+  if (cur.status !== 200) return { applied: false, previous: {}, reason: `object ${cur.status}` };
+
+  const meta: Record<string, string> = {};
+  const previous: Record<string, unknown> = { seoPlugin: target.seoPlugin };
+  if (target.metaTitle !== undefined) {
+    meta[keys.title] = target.metaTitle;
+    previous[keys.title] = cur.body?.meta?.[keys.title] ?? '';
+  }
+  if (target.metaDescription !== undefined) {
+    meta[keys.description] = target.metaDescription;
+    previous[keys.description] = cur.body?.meta?.[keys.description] ?? '';
+  }
+
+  const res = await wpPatch<unknown>(creds, endpoint, { meta }, opts);
+  return {
+    applied: res.status >= 200 && res.status < 300,
+    previous,
+    reason: res.status >= 300 ? `patch ${res.status}` : undefined,
+  };
+}
+
+/** Epic 6.6 — restore previously-saved values. */
+export async function rollbackFix(
+  creds: WpCredentials,
+  saved: { kind: 'meta' | 'alt'; objectType?: 'post' | 'page'; objectId?: number; mediaId?: number; previous: Record<string, unknown> },
+  opts: WpClientOptions = {},
+): Promise<{ applied: boolean }> {
+  if (saved.kind === 'alt' && saved.mediaId != null) {
+    const res = await wpPatch(
+      creds,
+      `/wp/v2/media/${saved.mediaId}`,
+      { alt_text: String(saved.previous['alt_text'] ?? '') },
+      opts,
+    );
+    return { applied: res.status >= 200 && res.status < 300 };
+  }
+  if (saved.kind === 'meta' && saved.objectType && saved.objectId != null) {
+    const meta = Object.fromEntries(
+      Object.entries(saved.previous).filter(([k]) => k !== 'seoPlugin'),
+    );
+    const res = await wpPatch(creds, `/wp/v2/${saved.objectType}s/${saved.objectId}`, { meta }, opts);
+    return { applied: res.status >= 200 && res.status < 300 };
+  }
+  return { applied: false };
 }

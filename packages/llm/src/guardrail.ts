@@ -7,7 +7,14 @@ import type { Explanation, StructuredIssue } from './types.js';
  */
 export function explanationIsGrounded(issue: StructuredIssue, explanation: Explanation): boolean {
   const allowed = new Set<string>();
-  for (const val of [issue.detectedValue, issue.pageUrl, issue.fixTitle, issue.description]) {
+  const sources = [
+    issue.detectedValue,
+    issue.pageUrl,
+    issue.fixTitle,
+    issue.description,
+    ...issue.catalogSteps,
+  ];
+  for (const val of sources) {
     if (!val) continue;
     for (const token of String(val).match(/\d+(?:[.,]\d+)?/g) ?? []) allowed.add(token);
   }

@@ -2,7 +2,9 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyError } from 'fastify';
 import { getEnv } from './env.js';
 import { crawlRoutes } from './routes/crawls.js';
+import { estimateRoutes } from './routes/estimates.js';
 import { healthRoutes } from './routes/health.js';
+import { recommendationRoutes } from './routes/recommendations.js';
 import { siteRoutes } from './routes/sites.js';
 import { stopQueue } from './queue.js';
 
@@ -31,6 +33,8 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
 await app.register(healthRoutes);
 await app.register(siteRoutes);
 await app.register(crawlRoutes);
+await app.register(recommendationRoutes);
+await app.register(estimateRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

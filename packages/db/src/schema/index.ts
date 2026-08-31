@@ -5,3 +5,5 @@ export * from './crawls.js';
 export * from './pages.js';
 export * from './issues.js';
 export * from './recommendations.js';
+export * from './keywords.js';
+export * from './estimates.js';

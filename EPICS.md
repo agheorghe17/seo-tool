@@ -99,51 +99,51 @@
 
 ## Epic 5 — Motor de recomandări + strat LLM
 
-- [ ] **5.1** Catalog `issue → fix` — pentru fiecare `rule_id`: `fix_title` predefinit, pași de bază, `impactHint`, `effortHint` (în cod, testabil)
-- [ ] **5.2** Scor de prioritate — `impact_score` × `effort_score` → `priority_rank` per pagină și global pe site
-- [ ] **5.3** `packages/llm` — interfață `explain(structuredIssue): Promise<{ text, steps }>`
-  - [ ] **5.3.1** Adaptor `anthropic` (Claude API, pay-as-you-go) — prompt strict, doar date structurate, temperatură joasă, limită de tokens
-  - [ ] **5.3.2** Adaptor `ollama` (model local, 0 lei) — același contract
-  - [ ] **5.3.3** Adaptor `none` — întoarce direct textul din catalog, fără LLM
-  - [ ] **5.3.4** Selecție prin `LLM_PROVIDER`; cache pe `(rule_id, rule_version, detected_value hash)` ca să nu regenerăm identic
-- [ ] **5.4** Job `recommend` — pentru fiecare issue: mapare la fix, calcul prioritate, generare explicație, salvare în `recommendations`
-- [ ] **5.5** Marcare `auto_fixable = true` pentru: meta title, meta description, alt text, schema markup. Restul → doar recomandare manuală
-- [ ] **5.6** Guardrail anti-halucinație — validare că explicația nu introduce entități/valori absente din payload-ul structurat (verificare de câmpuri + lungime); fallback la catalog dacă eșuează
+- [x] **5.1** Catalog `issue → fix` (`packages/scoring/src/catalog.ts`) — `fixTitle` + pași + `impactHint`/`effortHint` derivate din reguli, deterministe
+- [x] **5.2** Scor de prioritate — `prioritise` (`packages/shared`, impact²/efort, critic float) → `priority_rank` pe tot crawl-ul
+- [x] **5.3** `packages/llm` — `explain(structuredIssue): Promise<{ text, steps }>`
+  - [x] **5.3.1** Adaptor `anthropic` — `@anthropic-ai/sdk` lazy, prompt strict (system în `prompt.ts`), temp 0, `ANTHROPIC_MAX_TOKENS`, model implicit Haiku
+  - [x] **5.3.2** Adaptor `ollama` — `POST /api/chat` cu `format: json`, temp 0
+  - [x] **5.3.3** Adaptor `none` — întoarce `catalogSteps`, fără LLM
+  - [x] **5.3.4** `LLM_PROVIDER` + cache pe `(ruleId, ruleVersion, detectedValue)` prin `LlmCache` (Redis în worker), TTL `LLM_CACHE_TTL_SECONDS`
+- [x] **5.4** Job `recommend` (`apps/worker/src/jobs/recommend.ts`) — mapare la fix, prioritizare pe crawl, `explainIssue` cu pool, insert `recommendations` (idempotent), pune `estimate`
+- [x] **5.5** `auto_fixable` din `AUTO_FIXABLE_RULES` (title, meta description, alt text, schema)
+- [x] **5.6** Guardrail anti-halucinație (`guardrail.ts`) — respinge cifre/URL-uri absente din input; `explainIssue` cade pe catalog dacă pică sau adaptorul aruncă
 
-**Gata când:** fiecare issue are un fix concret + explicație în limbaj natural (sau template dacă `LLM_PROVIDER=none`), prioritizat, cu `auto_fixable` corect setat.
+**Gata când:** fiecare issue are un fix concret + explicație (sau template dacă `LLM_PROVIDER=none`), prioritizat, cu `auto_fixable` corect. *`packages/scoring` catalog + `packages/llm` + job: gata (7 teste llm, 4 catalog).*
 
 ---
 
 ## Epic 6 — Conector WordPress (citire + auto-fix)
 
-- [ ] **6.1** `connectors/wordpress` — client REST autentificat cu Application Password (din `site_secrets`)
-- [ ] **6.2** Citire conținut — `posts`, `pages`, meta (câmpuri Yoast/RankMath dacă există), media (alt text), temă activă, plugin-uri active
-- [ ] **6.3** Mapare pagină crawl-ată → obiect WP (după URL / slug) pentru a ști ce se poate edita
-- [ ] **6.4** Scriere fix-uri sigure (cu confirmare):
-  - [ ] **6.4.1** Meta title / description — prin endpoint Yoast/RankMath dacă e expus, altfel custom field propriu + filtru documentat
-  - [ ] **6.4.2** Alt text imagini — `PATCH /wp/v2/media/:id`
-  - [ ] **6.4.3** Schema markup — injectat prin câmp custom + snippet `wp_head` (documentat), sau via pluginul SEO dacă permite
-- [ ] **6.5** `POST /api/recommendations/:id/apply` — aplică un fix, salvează `applied`, `applied_at`, `applied_result_json`; suport pentru bulk explicit
-- [ ] **6.6** Rollback / istoric — păstrează valoarea anterioară în `applied_result_json` pentru revenire manuală
-- [ ] **6.7** Sincronizare periodică — polling la N ore (sau webhook din WP la publicare) pentru a marca paginile schimbate
+- [x] **6.1** `connectors/wordpress` — client REST cu Application Password (Basic auth), `wpGet`/`wpPatch`
+- [~] **6.2** Citire conținut — `resolveObject` + plugin-uri active; listarea completă posts/media: în Epic 8 la nevoie
+- [x] **6.3** `resolveObject(creds, url)` — mapare URL → obiect WP prin slug (posts apoi pages)
+- [x] **6.4** Scriere fix-uri sigure (`applyFix`):
+  - [x] **6.4.1** Meta title / description — chei per plugin (`metaKeysFor`: Yoast / RankMath / fallback `_seo_tool_*`), `POST /wp/v2/{type}s/{id}` cu `meta`
+  - [x] **6.4.2** Alt text — `POST /wp/v2/media/:id` cu `alt_text`
+  - [~] **6.4.3** Schema markup — chei `_seo_tool_*` există; injectarea în `wp_head` cere mu-plugin companion (documentat, nelivrat)
+- [x] **6.5** `POST /api/recommendations/:id/apply` — validează `auto_fixable` + WP conectat, aplică, salvează `applied`/`applied_at`/`applied_result_json`
+- [x] **6.6** Rollback — `POST /api/recommendations/:id/rollback` + `rollbackFix` din `applied_result_json.previous`
+- [ ] **6.7** Sincronizare periodică (polling / webhook) — Epic 9/12
 
-**Gata când:** un site WordPress conectat primește un fix `auto_fixable` aplicat cu confirmare, iar modificarea e vizibilă live pe site, cu valoarea veche păstrată pentru rollback.
+**Gata când:** un site WordPress conectat primește un fix `auto_fixable` aplicat cu confirmare, cu valoarea veche păstrată pentru rollback. *`connectors/wordpress` + endpoints: gata (8 teste, apply+rollback pe fixture server). Bulk apply + schema injection: rămân.*
 
 ---
 
 ## Epic 7 — Estimator de trafic (componenta cea mai sensibilă)
 
-- [ ] **7.1** OAuth Google Search Console — `POST /api/sites/:id/gsc/connect`, refresh token criptat în `site_secrets`
-- [ ] **7.2** Import baseline GSC — clicks, impressions, poziții medii pe ultimele 3-6 luni per pagină/query
-- [ ] **7.3** Fallback fără GSC — baseline din `keyword_data`: `volum × CTR(poziție curentă)` folosind curbe CTR-pe-poziție din `packages/shared` (sursă publică, documentată)
-  - [ ] **7.3.1** Sursă keywords v1 = GSC queries; DataForSEO doar dacă `FEATURE_DATAFORSEO=on`
-- [ ] **7.4** Model de impact al fix-urilor — per categorie de probleme rezolvate, multiplicator **conservator cu interval** (min/mediu/max) din corelații publicate (studii de ranking factors), nu presupuneri proprii
-- [ ] **7.5** Curbă de ramp-up temporal — factor pe orizont 3-12 luni: luna 1-2 ~fără mișcare (re-crawl/re-index), creștere graduală ulterior; **hard cap**: fără proiecție >2× lună-la-lună pentru site fără istoric
-- [ ] **7.6** Output — mereu `estimate_low` / `estimate_mid` / `estimate_high` + `confidence_level` (GSC conectat ⇒ „medium/high”, doar keyword model ⇒ „low”) + `assumptions_json` populat („publicare de conținut menținută”, „zero backlink-uri noi”, „algoritm Google stabil”, …)
-- [ ] **7.7** Job `estimate` + `GET /api/sites/:id/traffic-estimate`
-- [ ] **7.8** Teste care **blochează** orice cale de cod ce ar putea emite o singură cifră „garantată” sau o creștere >2× lună-la-lună
+- [x] **7.1** OAuth GSC — `POST /api/sites/:id/gsc/connect` (→ authUrl), `GET /api/sites/gsc/callback` (exchange → refresh token criptat în `site_secrets`), `connectors/gsc.ts`
+- [x] **7.2** Import baseline GSC — `fetchSearchAnalytics` (page dim, 90 zile) → `totalClicks` / 3 = medie lunară (job `estimate`)
+- [x] **7.3** Fallback fără GSC — `keywordBaseline`: Σ `estimatedClicks(volum, poziție)` din `keyword_data` folosind curbele CTR din `packages/shared/ctr.ts`
+  - [~] **7.3.1** Sursă keywords v1 = GSC/`keyword_data`; DataForSEO rămâne în spatele `dataForSeoEnabled()` (neimplementat)
+- [x] **7.4** Model de impact — `packages/estimator/impact.ts`: `CATEGORY_UPLIFT` (interval low/mid/high conservator per categorie) × saturație × headroom
+- [x] **7.5** Ramp-up — `rampFraction` (luna 1-2 ~0, logistic până la orizont) + `assertNoUnrealisticGrowth` (aruncă la >2× lună-la-lună)
+- [x] **7.6** Output — `estimateTraffic` întoarce mereu `estimateLow/Mid/High` + `series[]` + `confidenceLevel` (gsc ⇒ medium, altfel low) + `assumptions[]` populat
+- [x] **7.7** Job `estimate` (`apps/worker/src/jobs/estimate.ts`) → tabel `traffic_estimates`; `GET`/`POST /api/sites/:id/traffic-estimate`
+- [x] **7.8** Teste (9) — low≤mid≤high, `assumptions.length≥5`, high ≤ 2× baseline (≤1.6× fără GSC), fără cheie `estimate`/`guaranteed`, `assertNoUnrealisticGrowth` aruncă pe salt >2×
 
-**Gata când:** estimarea afișată este întotdeauna un interval cu asumpții vizibile și nivel de încredere; nu există cale de cod care produce un număr fix „garantat”.
+**Gata când:** estimarea e întotdeauna un interval cu asumpții vizibile și nivel de încredere; nu există cale de cod care produce un număr fix „garantat”. *`packages/estimator` + job + tabel + endpoints: gata.*
 
 ---
 

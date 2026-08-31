@@ -26,3 +26,6 @@ export const scoreCategoryEnum = pgEnum('score_category', [
 export const severityEnum = pgEnum('severity', ['critical', 'warning', 'info']);
 export const secretKindEnum = pgEnum('secret_kind', ['wp_app_password', 'gsc_refresh_token']);
 export const llmProviderEnum = pgEnum('llm_provider', ['anthropic', 'ollama', 'none']);
+export const keywordSourceEnum = pgEnum('keyword_source', ['gsc', 'dataforseo']);
+export const baselineSourceEnum = pgEnum('baseline_source', ['gsc', 'keyword_model']);
+export const confidenceLevelEnum = pgEnum('confidence_level', ['low', 'medium', 'high']);

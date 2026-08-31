@@ -16,6 +16,7 @@
     "crawler": "workspace:*",
     "db": "workspace:*",
     "drizzle-orm": "^0.38.3",
+    "estimator": "workspace:*",
     "ioredis": "^5.4.2",
     "llm": "workspace:*",
     "pg-boss": "^10.1.6",

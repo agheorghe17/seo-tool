@@ -11,7 +11,9 @@ if (!url) {
 }
 
 export default defineConfig({
-  schema: './src/schema/index.ts',
+  // Built JS (run `pnpm --filter db build` first; the `generate`/`push` scripts do this for you).
+  // drizzle-kit's loader doesn't rewrite NodeNext `.js` specifiers in `.ts` sources.
+  schema: './dist/schema/index.js',
   out: './migrations',
   dialect: 'postgresql',
   dbCredentials: { url },

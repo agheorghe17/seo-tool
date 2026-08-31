@@ -10,10 +10,11 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "generate": "drizzle-kit generate",
+    "build": "tsc -p tsconfig.build.json",
+    "generate": "pnpm build && drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "push": "drizzle-kit push",
-    "studio": "drizzle-kit studio",
+    "push": "pnpm build && drizzle-kit push",
+    "studio": "pnpm build && drizzle-kit studio",
     "lint": "eslint src",
     "type-check": "tsc --noEmit"
   },

@@ -4,11 +4,13 @@ import type { StructuredIssue } from './types.js';
 
 const issue: StructuredIssue = {
   ruleId: 'onpage.title-length',
+  ruleVersion: 1,
   category: 'onpage',
   severity: 'warning',
   description: 'Title-ul are 74 caractere (recomandat 30-60).',
   detectedValue: '74',
   fixTitle: 'Ajustează lungimea title-ului la 30-60 de caractere',
+  catalogSteps: ['Rescrie <title> în 30-60 de caractere.'],
   pageUrl: 'https://example.com/widgets',
 };
 

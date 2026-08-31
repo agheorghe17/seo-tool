@@ -1,11 +1,9 @@
 {
-  "name": "llm",
+  "name": "estimator",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "exports": { ".": "./src/index.ts" },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
@@ -14,7 +12,6 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
     "shared": "workspace:*"
   },
   "devDependencies": {

@@ -2,6 +2,8 @@ import type PgBoss from 'pg-boss';
 import { logger } from '../logger.js';
 import { handleCrawl } from './crawl.js';
 import { handleEnrich } from './enrich.js';
+import { handleEstimate } from './estimate.js';
+import { handleRecommend } from './recommend.js';
 import { handleRender } from './render.js';
 import { handleScore } from './score.js';
 import type { JobPayloads } from './types.js';
@@ -28,8 +30,8 @@ export const handlers: { [K in keyof JobPayloads]: Handler<K> } = {
   render: (job) => handleRender(job),
   enrich: handleEnrich,
   score: handleScore,
-  recommend: notImplemented('recommend'),
-  estimate: notImplemented('estimate'),
+  recommend: handleRecommend,
+  estimate: (job) => handleEstimate(job),
   'wp-apply': notImplemented('wp-apply'),
 };
 

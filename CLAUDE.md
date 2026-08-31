@@ -55,10 +55,11 @@ apps/
 packages/
   db/          Drizzle schema + migrații + client Postgres (exportă `db` + toate tabelele)
   shared/      tipuri + utilitare pure (crypto AES-256-GCM, curbe CTR, matematica scorului/priorității)
-  scoring/     catalog de reguli + motor de scoring (PUR, fără I/O, unit-tested)
-  crawler/     fetch static (undici), sitemap, robots.txt, extractor (cheerio), render (Playwright)
-  llm/         `explain(issue)` provider-agnostic + adaptoare anthropic | ollama | none
-  connectors/  wordpress | gsc | psi | crux | dataforseo (flagged)
+  scoring/     catalog de reguli + motor de scoring + fix catalog (PUR, fără I/O, unit-tested)
+  crawler/     fetch static (undici), sitemap, robots.txt, extractor (cheerio), render (playwright-core)
+  llm/         `explainIssue()` provider-agnostic + adaptoare anthropic | ollama | none + guardrail + cache
+  estimator/   estimare de trafic ca INTERVAL (impact × ramp-up), pur, testat
+  connectors/  wordpress | gsc | psi | crux | dataforseo (flagged) | cache
   config/      preset-uri eslint / tsconfig / tailwind
 ```
 
@@ -110,4 +111,9 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Epic 0 în curs — scaffold monorepo. Restul epicilor: neînceput. Vezi `EPICS.md`.
+Epics 0-7 implementate la nivel de logică + joburi + endpoints + teste (87 teste, type-check + lint verzi).
+Rămâne: integrarea end-to-end cu Postgres/Supabase (necesită credențiale), UI dashboard (Epic 8),
+fiabilitate coadă (Epic 9), multi-tenant/rate-limit (Epic 10), observabilitate (Epic 11), polish (Epic 12).
+Vezi `EPICS.md` pentru starea per task.
+
+Migrația inițială: `packages/db/migrations/0000_init.sql` (9 tabele). `pnpm --filter db build` înainte de `db:generate`.
