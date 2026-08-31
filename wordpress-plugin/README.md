@@ -7,18 +7,26 @@ click, și expune un namespace REST propriu (`seo-audit/v1`) folosit de aplicaț
 
 ## Build (creează .zip-ul de instalat)
 
-Din acest folder:
+**Recomandat** (din rădăcina repo-ului) — garantează separatori `/` corecți:
 
 ```bash
-cd wordpress-plugin
-zip -r seo-audit-connector.zip seo-audit-connector -x '*.DS_Store'
+git archive --format=zip --prefix=seo-audit-connector/ \
+  -o wordpress-plugin/seo-audit-connector.zip HEAD:wordpress-plugin/seo-audit-connector
 ```
 
-Pe Windows PowerShell:
+Cu `zip` disponibil:
 
-```powershell
-Compress-Archive -Path .\seo-audit-connector -DestinationPath .\seo-audit-connector.zip -Force
+```bash
+cd wordpress-plugin && zip -r seo-audit-connector.zip seo-audit-connector
 ```
+
+> NU folosi `Compress-Archive` din PowerShell 5.1 — face zip cu `\` în căi, iar unele
+> servere Linux (ex. RoMarg) nu extrag folderul → WordPress spune „Fișierul modulului nu există".
+
+## Instalare fără zip (fallback sigur)
+
+Copiază folderul `seo-audit-connector/` direct în `wp-content/plugins/` prin cPanel File
+Manager sau FTP, apoi activează-l din **Plugins**.
 
 ## Instalare
 
