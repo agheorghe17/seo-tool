@@ -1,35 +1,28 @@
-import type { PageData } from 'shared';
-
 export * from './ssrf.js';
+export * from './robots.js';
+export * from './sitemap.js';
+export * from './fetch.js';
+export * from './extract.js';
+export * from './ratelimit.js';
+export * from './crawl.js';
 
-/**
- * Crawler package surface. Epic 2 implements these; Epic 3 adds `renderPage` (Playwright).
- * Keeping the signatures here so the worker + API can be wired against a stable contract.
- */
+import type { PageData } from 'shared';
+import { fetchStatic } from './fetch.js';
+import { extractPage } from './extract.js';
 
-export interface DiscoverOptions {
-  maxPages: number;
-  requestsPerSecond: number;
-  userAgent: string;
-}
-
-export interface DiscoveredUrl {
-  url: string;
-  lastmod: string | null;
-  source: 'sitemap' | 'link-graph';
-}
-
-/** Epic 2.1 — parse sitemap(s) (incl. nested index) or BFS the internal link graph. */
-export async function discoverUrls(
-  _startUrl: string,
-  _opts: DiscoverOptions,
-): Promise<DiscoveredUrl[]> {
-  throw new Error('not implemented — Epic 2.1');
-}
-
-/** Epic 2.3 + 2.4 — static fetch with undici, then extract with cheerio. */
-export async function fetchAndExtract(_url: string, _opts: DiscoverOptions): Promise<PageData> {
-  throw new Error('not implemented — Epic 2.3/2.4');
+/** Convenience: fetch one URL statically and extract it. Epic 3 adds a Playwright variant. */
+export async function fetchAndExtract(url: string, userAgent: string): Promise<PageData> {
+  const res = await fetchStatic(url, { userAgent });
+  if (!res.isHtml) {
+    throw new Error(`non-HTML response for ${url} (${res.statusCode})`);
+  }
+  return extractPage({
+    finalUrl: res.finalUrl,
+    statusCode: res.statusCode,
+    redirectChain: res.redirectChain,
+    html: res.body,
+    headers: res.headers,
+  });
 }
 
 /** Epic 3.1 — headless render fallback for JS-heavy pages. */

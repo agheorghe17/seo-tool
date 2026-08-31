@@ -15,6 +15,8 @@ export function isSafeCrawlUrl(raw: string): boolean {
     return false;
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  // Escape hatch for local dev / tests only (fixture servers, local WordPress).
+  if (process.env.CRAWLER_ALLOW_PRIVATE === '1') return true;
   const host = url.hostname.toLowerCase();
   if (BLOCKED_HOSTNAMES.has(host)) return false;
   if (PRIVATE_IPV4.test(host)) return false;

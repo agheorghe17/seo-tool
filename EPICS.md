@@ -46,21 +46,21 @@
 
 ## Epic 2 — Crawler & extractor (fetch static)
 
-- [ ] **2.1** `packages/crawler` — descoperire URL-uri:
-  - [ ] **2.1.1** Parsare `sitemap.xml` + sitemap index imbricat (recursiv), `<lastmod>` reținut
-  - [ ] **2.1.2** Fallback fără sitemap: crawling BFS pe linkuri interne pornind de la homepage
-  - [ ] **2.1.3** Parsare `robots.txt` — disallow rules + `crawl-delay`
-- [ ] **2.2** Rate limiter per domeniu (token bucket în Redis, implicit 1-2 req/s, configurabil)
-- [ ] **2.3** Fetch static paralel cu `undici` (pool de concurență, timeout, urmărire redirect cu limită, `redirect_chain_json`)
-- [ ] **2.4** Extractor HTML (`cheerio`) — `title`, `meta_description`, `h1`, `headings_json`, `word_count` din conținutul principal, `images_json` (src+alt), linkuri interne/externe, `rel=canonical`, `<script type="application/ld+json">`, `indexability` din `meta robots` + header `X-Robots-Tag`
-- [ ] **2.5** `content_hash` (hash pe conținutul principal normalizat) pentru change-detection între crawl-uri
-- [ ] **2.6** Job `crawl` în `pg-boss` — `POST /api/sites/:id/crawls` pune jobul, întoarce imediat `crawl_id`
-- [ ] **2.7** Progres incremental — `crawls.pages_scanned` crește pe măsură ce se salvează pagini
-- [ ] **2.8** Limită v1: max **2000 pagini/crawl**; avertisment în UI dacă sitemap-ul depășește, cu opțiune de restrângere pe secțiune
-- [ ] **2.9** Semnal „JS-heavy”: dacă `word_count` randat static ≪ așteptat (raport față de structură / markere SPA), marchează pagina pentru sub-jobul de render
-- [ ] **2.10** Gestionare erori per pagină (timeout, 5xx, non-HTML) fără a pica tot crawl-ul; `crawls.status = partial` dacă unele pagini eșuează
+- [x] **2.1** `packages/crawler` — descoperire URL-uri:
+  - [x] **2.1.1** Parsare `sitemap.xml` + sitemap index imbricat (recursiv), `<lastmod>` reținut (`src/sitemap.ts`)
+  - [x] **2.1.2** Fallback fără sitemap: crawling BFS pe linkuri interne pornind de la homepage (`src/crawl.ts` `bfsDiscover`)
+  - [x] **2.1.3** Parsare `robots.txt` — disallow rules + `crawl-delay` (`src/robots.ts`)
+- [~] **2.2** Rate limiter per domeniu — token bucket in-memory (`src/ratelimit.ts`); varianta Redis pentru instanțe multiple: Epic 9
+- [x] **2.3** Fetch static cu `undici` (pool de concurență, timeout, urmărire redirect manuală → `redirect_chain_json`) (`src/fetch.ts`)
+- [x] **2.4** Extractor HTML (`cheerio`) — title, meta, headings, word_count din conținut principal, images (src+alt), linkuri interne/externe, canonical, JSON-LD `@type` (+`@graph`), `indexability` din `meta robots` + `X-Robots-Tag` (`src/extract.ts`)
+- [x] **2.5** `content_hash` (sha256 pe conținutul principal normalizat, case-insensitive)
+- [x] **2.6** Job `crawl` în `pg-boss` (`apps/worker/src/jobs/crawl.ts`) — `POST /api/sites/:id/crawls` pune jobul, întoarce `crawl_id` (202)
+- [x] **2.7** Progres incremental — `crawls.pages_scanned` flush la fiecare 5 pagini + `GET /api/crawls/:id` cu `progressPct`
+- [~] **2.8** Limită `CRAWL_MAX_PAGES` (implicit 2000) aplicată în crawler; avertismentul + restrângerea pe secțiune în UI: Epic 8
+- [x] **2.9** Semnal „JS-heavy” (`looksJsHeavy`) → sub-job `render` pus în coadă
+- [x] **2.10** Erori per pagină (timeout, 5xx, non-HTML) fără a pica crawl-ul; evenimente `error`/`skipped`; `crawls.status = partial`
 
-**Gata când:** introduci un URL public, primești o listă de pagini cu date brute extrase; sitemap index imbricat funcționează; `robots.txt` disallow este respectat; progresul crește vizibil.
+**Gata când:** introduci un URL public, primești o listă de pagini cu date brute extrase; sitemap index imbricat funcționează; `robots.txt` disallow este respectat; progresul crește vizibil. *`packages/crawler` + job worker + endpoints: gata (22 teste crawler). Integrare DB end-to-end: necesită Postgres.*
 
 ---
 
