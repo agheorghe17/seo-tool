@@ -89,7 +89,28 @@ export default function SitePage() {
         </Card>
       )}
 
-      {site.connectionType === 'wordpress' && !site.wpSiteUrl && <WpConnect siteId={siteId} />}
+      <Card>
+        <div className="flex items-center justify-between">
+          <h2 className="font-medium">WordPress</h2>
+          {site.wpSiteUrl ? <Badge tone="good">conectat</Badge> : <Badge tone="neutral">neconectat</Badge>}
+        </div>
+        {site.wpSiteUrl ? (
+          <p className="mt-1 text-sm text-neutral-500">
+            Conectat la <code>{site.wpSiteUrl}</code>. Recomandările marcate ca auto-fixabile pot
+            fi aplicate direct pe site din pagina fiecărei pagini.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-neutral-500">
+              Conectează prin Application Password (recomandat: instalează pluginul SEO Audit
+              Connector și generează parola din Setări &rarr; SEO Audit).
+            </p>
+            <div className="mt-3">
+              <WpConnect siteId={siteId} />
+            </div>
+          </>
+        )}
+      </Card>
 
       <Card>
         <div className="flex items-center justify-between">
@@ -158,13 +179,9 @@ function WpConnect({ siteId }: { siteId: string }) {
   const [applicationPassword, setApplicationPassword] = useState('');
 
   return (
-    <Card>
-      <h2 className="font-medium">Conectează WordPress</h2>
-      <p className="mt-1 text-sm text-neutral-500">
-        Generează un Application Password în WP (Utilizatori → Profil) și lipește-l aici.
-      </p>
+    <div>
       <form
-        className="mt-3 space-y-2"
+        className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
           connect.mutate({ wpSiteUrl, username, applicationPassword });
@@ -202,6 +219,6 @@ function WpConnect({ siteId }: { siteId: string }) {
           </p>
         )}
       </form>
-    </Card>
+    </div>
   );
 }
