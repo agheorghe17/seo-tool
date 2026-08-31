@@ -8,3 +8,4 @@ export * from './recommendations.js';
 export * from './keywords.js';
 export * from './estimates.js';
 export * from './ops.js';
+export * from './strategy.js';

@@ -29,3 +29,30 @@ export const llmProviderEnum = pgEnum('llm_provider', ['anthropic', 'ollama', 'n
 export const keywordSourceEnum = pgEnum('keyword_source', ['gsc', 'dataforseo']);
 export const baselineSourceEnum = pgEnum('baseline_source', ['gsc', 'keyword_model']);
 export const confidenceLevelEnum = pgEnum('confidence_level', ['low', 'medium', 'high']);
+
+// --- Strategy module (Epics 13-19) ---
+export const keywordIntentEnum = pgEnum('keyword_intent', [
+  'informational',
+  'commercial',
+  'transactional',
+  'navigational',
+  'local',
+  'unknown',
+]);
+export const keywordBucketEnum = pgEnum('keyword_bucket', [
+  'quick_win',
+  'build_content',
+  'long_game',
+  'tracked',
+  'none',
+]);
+export const expansionSourceEnum = pgEnum('expansion_source', [
+  'seed',
+  'autocomplete',
+  'keyword_planner',
+  'gsc',
+  'serp',
+]);
+export const rankSourceEnum = pgEnum('rank_source', ['gsc', 'serp']);
+export const competitorAddedByEnum = pgEnum('competitor_added_by', ['user', 'auto']);
+export const roadmapStatusEnum = pgEnum('roadmap_status', ['todo', 'doing', 'done', 'skipped']);

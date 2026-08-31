@@ -90,6 +90,62 @@ drop policy if exists job_runs_none on job_runs;
 create policy job_runs_none on job_runs
   for select using (false);
 
+-- --- Strategy module (Epics 13-19) — owner via site ---
+alter table business_profiles enable row level security;
+alter table competitors       enable row level security;
+alter table competitor_pages  enable row level security;
+alter table keyword_clusters  enable row level security;
+alter table rank_snapshots    enable row level security;
+alter table serp_results      enable row level security;
+alter table keyword_playbooks enable row level security;
+alter table roadmap_items     enable row level security;
+
+drop policy if exists business_profiles_owner on business_profiles;
+create policy business_profiles_owner on business_profiles for select using (
+  exists (select 1 from sites s where s.id = business_profiles.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists competitors_owner on competitors;
+create policy competitors_owner on competitors for select using (
+  exists (select 1 from sites s where s.id = competitors.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists competitor_pages_owner on competitor_pages;
+create policy competitor_pages_owner on competitor_pages for select using (
+  exists (
+    select 1 from competitors c join sites s on s.id = c.site_id
+    where c.id = competitor_pages.competitor_id and s.user_id = auth.uid()
+  )
+);
+
+drop policy if exists keyword_clusters_owner on keyword_clusters;
+create policy keyword_clusters_owner on keyword_clusters for select using (
+  exists (select 1 from sites s where s.id = keyword_clusters.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists rank_snapshots_owner on rank_snapshots;
+create policy rank_snapshots_owner on rank_snapshots for select using (
+  exists (select 1 from sites s where s.id = rank_snapshots.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists serp_results_owner on serp_results;
+create policy serp_results_owner on serp_results for select using (
+  exists (select 1 from sites s where s.id = serp_results.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists keyword_playbooks_owner on keyword_playbooks;
+create policy keyword_playbooks_owner on keyword_playbooks for select using (
+  exists (
+    select 1 from keyword_data k join sites s on s.id = k.site_id
+    where k.id = keyword_playbooks.keyword_id and s.user_id = auth.uid()
+  )
+);
+
+drop policy if exists roadmap_items_owner on roadmap_items;
+create policy roadmap_items_owner on roadmap_items for select using (
+  exists (select 1 from sites s where s.id = roadmap_items.site_id and s.user_id = auth.uid())
+);
+
 -- Realtime: the dashboard subscribes to crawl-row updates for live progress.
 do $$
 begin

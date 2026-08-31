@@ -1,5 +1,11 @@
-import { index, integer, pgTable, real, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { keywordSourceEnum } from './enums.js';
+import { sql } from 'drizzle-orm';
+import { boolean, index, integer, pgTable, real, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  expansionSourceEnum,
+  keywordBucketEnum,
+  keywordIntentEnum,
+  keywordSourceEnum,
+} from './enums.js';
 import { pages } from './pages.js';
 import { sites } from './sites.js';
 
@@ -17,8 +23,23 @@ export const keywordData = pgTable(
     difficultyScore: integer('difficulty_score'),
     source: keywordSourceEnum('source').notNull(),
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+
+    // --- Strategy module (Epic 14) ---
+    intent: keywordIntentEnum('intent').default('unknown'),
+    clusterId: uuid('cluster_id'), // FK added in strategy.ts relations / migration
+    businessRelevance: smallint('business_relevance'),
+    competition: real('competition'),
+    opportunityScore: smallint('opportunity_score'),
+    bucket: keywordBucketEnum('bucket').notNull().default('none'),
+    hasTargetPage: boolean('has_target_page').notNull().default(false),
+    expansionSource: expansionSourceEnum('expansion_source'),
+    gl: text('gl').notNull().default(sql`'ro'`),
+    hl: text('hl').notNull().default(sql`'ro'`),
   },
-  (t) => [index('keyword_data_site_idx').on(t.siteId, t.keyword)],
+  (t) => [
+    index('keyword_data_site_idx').on(t.siteId, t.keyword),
+    index('keyword_data_site_bucket_idx').on(t.siteId, t.bucket),
+  ],
 );
 
 export type KeywordDataRow = typeof keywordData.$inferSelect;

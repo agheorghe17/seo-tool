@@ -340,6 +340,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
+  packages/strategy:
+    dependencies:
+      shared:
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      config:
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
