@@ -10,6 +10,7 @@ import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { recommendationRoutes } from './routes/recommendations.js';
 import { siteRoutes } from './routes/sites.js';
+import { strategyRoutes } from './routes/strategy.js';
 import { stopQueue } from './queue.js';
 
 const env = getEnv();
@@ -67,6 +68,7 @@ await app.register(recommendationRoutes);
 await app.register(estimateRoutes);
 await app.register(meRoutes);
 await app.register(billingRoutes);
+await app.register(strategyRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);
