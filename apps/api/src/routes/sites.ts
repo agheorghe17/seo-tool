@@ -27,9 +27,23 @@ const createSiteBody = z.object({
 const verifyBody = z.object({ method: z.enum(VERIFICATION_METHODS) });
 
 const wpConnectBody = z.object({
-  wpSiteUrl: z.string().url(),
-  username: z.string().min(1),
-  applicationPassword: z.string().min(1),
+  // accept "https://site.tld", "https://site.tld/", or a trailing path — normalise to origin
+  wpSiteUrl: z
+    .string()
+    .url()
+    .transform((u) => {
+      try {
+        return new URL(u).origin;
+      } catch {
+        return u.replace(/\/+$/, '');
+      }
+    }),
+  username: z.string().min(1).trim(),
+  // WP Application Passwords display with spaces; they work with or without — strip them
+  applicationPassword: z
+    .string()
+    .min(1)
+    .transform((p) => p.replace(/\s+/g, '')),
 });
 
 async function loadOwnedSite(userId: string, siteId: string) {
@@ -143,7 +157,10 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
       username: parsed.data.username,
       applicationPassword: parsed.data.applicationPassword,
     });
-    if (!info.ok) return reply.code(400).send({ error: info.reason ?? 'connection failed' });
+    if (!info.ok) {
+      req.log.warn({ wpSiteUrl: parsed.data.wpSiteUrl, restBase: info.restBase, reason: info.reason }, 'wordpress connect failed');
+      return reply.code(400).send({ error: info.reason ?? 'connection failed', restBase: info.restBase });
+    }
 
     const enc = encryptSecret(parsed.data.applicationPassword);
     await db

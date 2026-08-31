@@ -66,8 +66,11 @@ describe('WordPress client (fixture server)', () => {
         res.end(JSON.stringify(obj));
       };
 
+      if (url === '/wp-json' || url === '/wp-json/') {
+        return send(200, { name: 'Fixture WP', namespaces: ['wp/v2'] });
+      }
       if (url.startsWith('/wp-json/wp/v2/users/me')) {
-        return authed ? send(200, { id: 1 }) : send(401, { code: 'unauthorized' });
+        return authed ? send(200, { id: 1 }) : send(401, { code: 'rest_cannot_view' });
       }
       if (url === '/wp-json/wp/v2/types') return send(200, { post: {}, page: {} });
       if (url === '/wp-json/wp/v2/plugins') {

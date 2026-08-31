@@ -89,21 +89,62 @@ export async function testConnection(
   opts: WpClientOptions = {},
 ): Promise<WpConnectionInfo> {
   const restBase = restBaseFor(creds.siteUrl);
+  const fail = (reason: string): WpConnectionInfo => ({
+    ok: false,
+    restBase,
+    types: [],
+    seoPlugin: null,
+    reason,
+  });
 
-  const me = await wpGet<{ id?: number }>(creds, '/wp/v2/users/me?context=edit', opts).catch(
-    (err) => ({ status: 0, body: null, err }) as { status: number; body: null },
-  );
+  // 1) Is the REST API reachable at all (unauthenticated)?
+  let root: { status: number; body: { name?: string; code?: string } | null };
+  try {
+    const doFetch = opts.fetchImpl ?? fetch;
+    const res = await doFetch(restBase, { redirect: 'follow' });
+    const parsed = (await res.json().catch(() => null)) as
+      | { name?: string; code?: string }
+      | null;
+    root = { status: res.status, body: parsed };
+  } catch {
+    return fail(
+      `Nu am putut contacta ${restBase}. Verifică URL-ul, HTTPS-ul și că site-ul e online.`,
+    );
+  }
+  if (root.status === 404 || root.body?.code === 'rest_no_route') {
+    return fail(
+      `${restBase} întoarce 404. REST API pare dezactivat (plugin de securitate?) sau URL-ul e greșit.`,
+    );
+  }
+  if (root.status >= 500) {
+    return fail(`Site-ul a răspuns ${root.status} la ${restBase} (eroare de server).`);
+  }
+
+  // 2) Authenticated call.
+  const me = await wpGet<{ id?: number; code?: string; message?: string }>(
+    creds,
+    '/wp/v2/users/me?context=edit',
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+
   if (me.status === 401 || me.status === 403) {
-    return { ok: false, restBase, types: [], seoPlugin: null, reason: 'Autentificare respinsă (user sau Application Password greșit)' };
+    const code = (me.body as { code?: string } | null)?.code;
+    if (code === 'rest_not_logged_in' || code === 'rest_login_required') {
+      return fail(
+        'Header-ul Authorization nu ajunge la WordPress. Adaugă în .htaccess: ' +
+          'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1  (sau CGIPassAuth On).',
+      );
+    }
+    return fail(
+      'Autentificare respinsă. Verifică: userul e exact (case-sensitive), Application Password-ul e cel corect, ' +
+        'și userul NU e blocat de un plugin de securitate (2FA, „limit login", Wordfence).',
+    );
+  }
+  if (me.status === 0) {
+    return fail('Conexiune întreruptă / timeout către WordPress.');
   }
   if (me.status !== 200 || !me.body?.id) {
-    return {
-      ok: false,
-      restBase,
-      types: [],
-      seoPlugin: null,
-      reason: me.status === 0 ? 'Nu am putut contacta site-ul WordPress' : `REST API a răspuns ${me.status}`,
-    };
+    return fail(`/wp/v2/users/me a răspuns ${me.status}.`);
   }
 
   const typesRes = await wpGet<Record<string, unknown>>(creds, '/wp/v2/types', opts);
