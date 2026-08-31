@@ -55,6 +55,12 @@ export default function SitePage() {
         }
       />
 
+      {(startCrawl.isError || verify.isError) && (
+        <p className="text-sm text-red-600">
+          {((startCrawl.error ?? verify.error) as Error).message}
+        </p>
+      )}
+
       {!site.verified && (
         <Card>
           <h2 className="font-medium">Verifică proprietatea</h2>
@@ -99,6 +105,13 @@ export default function SitePage() {
         <p className="mt-1 text-sm text-neutral-500">
           Conectat = baseline de trafic din date reale și încredere mai mare a estimării.
         </p>
+        {connectGsc.isError && (
+          <p className="mt-2 text-sm text-amber-600">
+            {(connectGsc.error as Error).message.includes('GOOGLE_OAUTH')
+              ? 'Google OAuth nu e configurat (GOOGLE_OAUTH_CLIENT_ID / _SECRET / _REDIRECT_URI în .env). Opțional — estimarea merge și fără GSC, cu încredere „low".'
+              : (connectGsc.error as Error).message}
+          </p>
+        )}
       </Card>
 
       {site.lastCrawl && (
