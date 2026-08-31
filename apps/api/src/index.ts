@@ -1,18 +1,24 @@
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyError } from 'fastify';
 import { getEnv } from './env.js';
+import { captureError, initSentry, LOG_REDACT } from './observability.js';
+import { billingRoutes } from './routes/billing.js';
 import { crawlRoutes } from './routes/crawls.js';
 import { estimateRoutes } from './routes/estimates.js';
 import { healthRoutes } from './routes/health.js';
+import { meRoutes } from './routes/me.js';
 import { recommendationRoutes } from './routes/recommendations.js';
 import { siteRoutes } from './routes/sites.js';
 import { stopQueue } from './queue.js';
 
 const env = getEnv();
+initSentry();
 
 const app = Fastify({
   logger: {
     level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+    redact: LOG_REDACT,
     transport: env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
   },
 });
@@ -22,12 +28,20 @@ await app.register(cors, {
   credentials: true,
 });
 
+// Epic 10.4 — per-user (falls back to IP) rate limiting. In-memory; swap for a Redis
+// store when running more than one API instance.
+await app.register(rateLimit, {
+  global: true,
+  max: 240,
+  timeWindow: '1 minute',
+  keyGenerator: (req) => req.userId ?? req.ip,
+});
+
 app.setErrorHandler((err: FastifyError, req, reply) => {
   req.log.error(err);
   const status = err.statusCode ?? 500;
-  reply.code(status).send({
-    error: status >= 500 ? 'internal error' : err.message,
-  });
+  if (status >= 500) captureError(err, { url: req.url, userId: req.userId });
+  reply.code(status).send({ error: status >= 500 ? 'internal error' : err.message });
 });
 
 await app.register(healthRoutes);
@@ -35,6 +49,8 @@ await app.register(siteRoutes);
 await app.register(crawlRoutes);
 await app.register(recommendationRoutes);
 await app.register(estimateRoutes);
+await app.register(meRoutes);
+await app.register(billingRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

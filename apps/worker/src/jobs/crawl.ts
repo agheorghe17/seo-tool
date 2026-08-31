@@ -1,9 +1,10 @@
 import type PgBoss from 'pg-boss';
-import { and, eq } from 'drizzle-orm';
-import { crawls, db, pages, sites } from 'db';
+import { and, eq, sql } from 'drizzle-orm';
+import { crawls, db, pages, sites, users } from 'db';
 import { crawlSite } from 'crawler';
 import type { PageData } from 'shared';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import type { CrawlJob } from './types.js';
 
 const MAX_PAGES = Number(process.env.CRAWL_MAX_PAGES ?? 2000);
@@ -49,6 +50,7 @@ export async function handleCrawl(job: PgBoss.Job<CrawlJob>, boss: PgBoss): Prom
   let scanned = 0;
   let rendered = 0;
   let lastFlush = 0;
+  let cancelled = false;
 
   try {
     for await (const ev of crawlSite({
@@ -78,7 +80,7 @@ export async function handleCrawl(job: PgBoss.Job<CrawlJob>, boss: PgBoss): Prom
             .from(pages)
             .where(and(eq(pages.crawlId, crawlId), eq(pages.url, ev.page.url)));
           if (row) {
-            await boss.send('render', { crawlId, pageId: row.id, url: ev.page.url });
+            await sendNext(boss, 'render', { crawlId, pageId: row.id, url: ev.page.url });
           }
         }
       }
@@ -90,6 +92,17 @@ export async function handleCrawl(job: PgBoss.Job<CrawlJob>, boss: PgBoss): Prom
           .update(crawls)
           .set({ pagesScanned: scanned, pagesRendered: rendered })
           .where(eq(crawls.id, crawlId));
+
+        // Epic 9.5 — honour a cancel requested via DELETE /api/crawls/:id.
+        const [cur] = await db
+          .select({ status: crawls.status })
+          .from(crawls)
+          .where(eq(crawls.id, crawlId));
+        if (cur && cur.status !== 'running') {
+          cancelled = true;
+          logger.info({ crawlId }, 'crawl cancelled mid-run');
+          break;
+        }
       }
 
       if (ev.type === 'done') {
@@ -102,10 +115,16 @@ export async function handleCrawl(job: PgBoss.Job<CrawlJob>, boss: PgBoss): Prom
             completedAt: new Date(),
           })
           .where(eq(crawls.id, crawlId));
-        await boss.send('enrich', { crawlId });
+        // Epic 10.3 — count scanned pages against the user's monthly quota.
+        await db
+          .update(users)
+          .set({ quotaUsed: sql`${users.quotaUsed} + ${ev.scanned}` })
+          .where(eq(users.id, site.userId));
+        await sendNext(boss, 'enrich', { crawlId });
         logger.info({ crawlId, scanned: ev.scanned, status: ev.status }, 'crawl finished');
       }
     }
+    if (cancelled) return;
   } catch (err) {
     await db
       .update(crawls)

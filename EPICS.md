@@ -166,54 +166,54 @@
 
 ## Epic 9 — Coadă de joburi & fiabilitate
 
-- [ ] **9.1** `pg-boss` — definire cozi per tip (`crawl`, `render`, `enrich`, `score`, `recommend`, `estimate`, `wp-apply`), concurență per tip
-- [ ] **9.2** Retry cu backoff exponențial + dead-letter; `job_runs` ca audit
-- [ ] **9.3** Orchestrare pipeline — la finalul unui job se pune automat următorul (`crawl` → `enrich` → `score` → `recommend` → `estimate`)
-- [ ] **9.4** Idempotență — re-rularea unui job nu dublează pagini/issues (upsert pe `(crawl_id, url)` / `(page_id, rule_id)`)
-- [ ] **9.5** Anulare crawl — `DELETE /api/crawls/:id` marchează `failed` și oprește joburile în așteptare
-- [ ] **9.6** Timeout global per crawl + cleanup de joburi orfane
+- [x] **9.1** `pg-boss` — cozi per tip cu `concurrency` (crawl 2, render 1, enrich/score 4, recommend/estimate/wp-apply 2)
+- [x] **9.2** Retry cu backoff exponențial (`JOB_SEND_OPTIONS`: retryLimit 3, retryDelay 30, retryBackoff) + `expireInSeconds`; tabel `job_runs` (running/ok/failed + durată) în jurul fiecărui handler
+- [x] **9.3** Orchestrare — `sendNext(boss, ...)` la finalul fiecărui job continuă pipeline-ul cu aceleași opțiuni de retry
+- [x] **9.4** Idempotență — upsert `(crawl_id, url)` pe `pages`; `issues`/`recommendations` șterse+reinserate per crawl; `job_runs` doar log
+- [x] **9.5** Anulare — `DELETE /api/crawls/:id` (status `failed`); `handleCrawl` recitește statusul la fiecare flush și se oprește dacă nu mai e `running`
+- [x] **9.6** `sweepStaleCrawls` la pornirea worker-ului + la fiecare oră (crawls `running`/`queued` mai vechi de 3h → `failed`)
 
-**Gata când:** un crawl complet rulează prin tot pipeline-ul fără intervenție; un job picat se reia; re-rularea nu produce duplicate.
+**Gata când:** un crawl complet rulează prin tot pipeline-ul fără intervenție; un job picat se reia; re-rularea nu produce duplicate. *Implementat; verificarea end-to-end necesită Postgres + worker rulând.*
 
 ---
 
 ## Epic 10 — Multi-tenant, planuri & rate limiting (pregătire comercială)
 
-- [ ] **10.1** RLS verificat pe toate tabelele cu `user_id` (teste de izolare: user A nu vede datele lui B)
-- [ ] **10.2** Câmpuri de plan pe `users` (`plan`, `quota_pages_month`, `quota_used`) + reset lunar
-- [ ] **10.3** Enforcement cote — crawl refuzat / trunchiat când se depășește cota; mesaj clar în UI
-- [ ] **10.4** Rate limiting API per user (token bucket Redis) pe endpoint-urile scumpe (`crawls`, `apply`)
-- [ ] **10.5** Feature flags (`FEATURE_DATAFORSEO`, `LLM_PROVIDER`, limite de pagini) centralizate
-- [ ] **10.6** Audit log pe acțiuni sensibile (conectare site, aplicare fix, conectare GSC)
+- [~] **10.1** RLS — `packages/db/sql/policies.sql` (RLS enabled + policy `owner` pe toate tabelele, `site_secrets`/`job_runs` = deny-all pentru anon, `crawls` în publicația Realtime); `pnpm --filter db policies`. Notă: API/worker se conectează direct ca owner și ocolesc RLS (verificarea de proprietate e în cod). Teste de izolare: necesită PG
+- [x] **10.2** Câmpuri plan pe `users` (deja în schemă); `GET /api/me` + `GET /api/me/usage`. Reset lunar: necesită cron (Epic `schedule`)
+- [x] **10.3** Enforcement cotă — `POST /api/sites/:id/crawls` → 429 dacă `quotaUsed >= quotaPagesMonth`; `handleCrawl` incrementează `quotaUsed` cu paginile scanate la final
+- [x] **10.4** Rate limiting — `@fastify/rate-limit` global (240/min, cheie = `userId` sau IP); `healthz`/`readyz` exceptate. In-memory; store Redis pentru instanțe multiple
+- [x] **10.5** Feature flags centralizate — `packages/shared/src/flags.ts` `readFlags()` (`FEATURE_DATAFORSEO`, `FEATURE_BILLING`, `RENDER_ENABLED`, `LLM_PROVIDER`, limite crawl)
+- [x] **10.6** Audit log — tabel `audit_log` + `recordAudit()`; apelat pe `site.create`/`verify`/`wordpress.connect`/`gsc.connect`/`crawl.start`/`recommendation.apply`/`rollback`/`account.delete`
 
-**Gata când:** un al doilea utilizator de test are date complet izolate; depășirea cotei oprește crawl-ul cu mesaj; flag-urile schimbă comportamentul fără redeploy de cod.
+**Gata când:** un al doilea utilizator de test are date complet izolate; depășirea cotei oprește crawl-ul cu mesaj; flag-urile schimbă comportamentul fără redeploy de cod. *Cod complet; izolarea RLS se verifică cu PG.*
 
 ---
 
 ## Epic 11 — Observabilitate, securitate & conformitate
 
-- [ ] **11.1** Sentry în api + worker + web; logging structurat `pino` cu `crawl_id` / `site_id` în context
-- [ ] **11.2** Validare Zod pe toate intrările API; sanitizare URL-uri (blochează IP-uri interne / SSRF în crawler)
-- [ ] **11.3** Rotire / management `ENCRYPTION_KEY`; verificare că secretele nu apar în loguri
-- [ ] **11.4** Politici de retenție — ștergere crawl-uri vechi (păstrează ultimele N per site) pentru a rămâne în 500 MB Supabase free
-- [ ] **11.5** GDPR minim — export date user, ștergere cont (cascade), pagină de privacy
-- [ ] **11.6** Health / readiness endpoints + alertă simplă (Sentry) când worker-ul e blocat
-- [ ] **11.7** Dashboard intern de cost — număr apeluri PSI/CrUX/LLM per audit, ca să vezi când depășești free tiers
+- [x] **11.1** Sentry opt-in (`SENTRY_DSN`) în api (`observability.ts`) + worker (`logger.ts`, `captureError` pe job failed); `pino` structurat
+- [x] **11.2** Zod pe toate rutele API; SSRF în crawler (`ssrf.ts`, blochează IP-uri private/loopback/`.local`)
+- [x] **11.3** Cripto AES-256-GCM (`packages/shared/crypto.ts`); `pino` `redact` pe `authorization`/`applicationPassword`/`refreshToken`/`ciphertext`/`*_API_KEY` în api + worker
+- [x] **11.4** Retenție — `pruneOldCrawls` în job `estimate` (păstrează `RETAIN_CRAWLS_PER_SITE`, implicit 5; pages/issues/recos cascade)
+- [x] **11.5** GDPR — `GET /api/me/export` (dump JSON), `DELETE /api/me` (cascade), pagina `/privacy` cu ambele butoane
+- [x] **11.6** `GET /readyz` verifică DB (`select 1` → 503 la eșec); `sweepStaleCrawls` la pornire; Sentry pentru joburi blocate
+- [x] **11.7** `GET /api/me/usage` — plan, cotă, crawl-uri luna asta, `job_runs` agregate pe tip/status
 
-**Gata când:** un crawl pe un domeniu ostil (redirecturi, IP intern, HTML uriaș) nu compromite serverul; ștergerea contului elimină toate datele; costul per audit e vizibil.
+**Gata când:** un crawl pe un domeniu ostil (redirecturi, IP intern, HTML uriaș) nu compromite serverul; ștergerea contului elimină toate datele; costul per audit e vizibil. *Implementat.*
 
 ---
 
 ## Epic 12 — Polish & schelet de monetizare
 
-- [ ] **12.1** Onboarding ghidat (primul site, prima verificare, primul crawl)
-- [ ] **12.2** Pagină de pricing + comparație planuri (Free / Pro) — fără plată încă, doar UI
-- [ ] **12.3** Placeholder de billing (Stripe) izolat în spatele unui flag, neactivat
-- [ ] **12.4** Rapoarte cu branding (logo + culori) pentru uz de agenție
-- [ ] **12.5** Email tranzacțional minim (crawl terminat) — Resend free tier sau Supabase
-- [ ] **12.6** Documentație utilizator (cum verifici proprietatea, cum conectezi WP, cum citești estimarea)
+- [~] **12.1** Onboarding — `EmptyState` pe `/sites` ghidează la primul site + verificare; wizard dedicat pe mai mulți pași: opțional ulterior
+- [x] **12.2** `/pricing` — comparație Free / Pro (static, fără plată)
+- [x] **12.3** Billing placeholder — `POST /api/billing/checkout` → 501 (flag off sau „not implemented”), în spatele `FEATURE_BILLING`
+- [~] **12.4** Raport imprimabil arată domeniul + dată; logo/culori de brand configurabile: ulterior
+- [x] **12.5** Email tranzacțional — `sendCrawlDoneEmail` (Resend HTTP API, no-op fără `RESEND_API_KEY`), apelat la finalul job-ului `estimate`
+- [x] **12.6** `docs/USAGE.md` — flux complet (cont, verificare, WP, GSC, crawl, rezultate, estimare, export, date)
 
-**Gata când:** un utilizator nou parcurge onboarding-ul până la primul raport fără ajutor; pagina de pricing există; billing-ul e pregătit dar oprit.
+**Gata când:** un utilizator nou parcurge onboarding-ul până la primul raport fără ajutor; pagina de pricing există; billing-ul e pregătit dar oprit. *Livrat; wizard de onboarding și branding de raport rămân opționale.*
 
 ---
 

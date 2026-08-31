@@ -14,6 +14,9 @@ export function Nav({ email }: { email: string | null }) {
           SEO Audit
         </Link>
         <div className="flex items-center gap-4 text-sm text-neutral-500">
+          <Link href="/privacy" className="hover:text-neutral-900 dark:hover:text-neutral-100">
+            Date
+          </Link>
           {email && <span className="hidden sm:inline">{email}</span>}
           <button
             className="hover:text-neutral-900 dark:hover:text-neutral-100"

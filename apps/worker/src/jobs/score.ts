@@ -4,6 +4,7 @@ import { db, issues, pages, type PageRow } from 'db';
 import { loadWeights, scorePage, scoreSite, type SiteFacts } from 'scoring';
 import type { PageData } from 'shared';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import type { ScoreJob } from './types.js';
 
 let weightsConfig: unknown;
@@ -47,7 +48,7 @@ export async function handleScore(job: PgBoss.Job<ScoreJob>, boss: PgBoss): Prom
   const rows = await db.select().from(pages).where(eq(pages.crawlId, crawlId));
   if (rows.length === 0) {
     logger.warn({ crawlId }, 'score: no pages');
-    await boss.send('recommend', { crawlId });
+    await sendNext(boss, 'recommend', { crawlId });
     return;
   }
 
@@ -110,5 +111,5 @@ export async function handleScore(job: PgBoss.Job<ScoreJob>, boss: PgBoss): Prom
     'score finished',
   );
 
-  await boss.send('recommend', { crawlId });
+  await sendNext(boss, 'recommend', { crawlId });
 }

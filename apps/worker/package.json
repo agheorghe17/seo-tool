@@ -15,6 +15,7 @@
     "connectors": "workspace:*",
     "crawler": "workspace:*",
     "db": "workspace:*",
+    "@sentry/node": "^8.47.0",
     "drizzle-orm": "^0.38.3",
     "estimator": "workspace:*",
     "ioredis": "^5.4.2",

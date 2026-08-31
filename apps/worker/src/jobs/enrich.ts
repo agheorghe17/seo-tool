@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { crawls, db, pages } from 'db';
 import { fetchCrux, fetchPageSpeed, mergeCwv, withCache } from 'connectors';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import { getCacheStore } from '../redis.js';
 import { runPool } from './pool.js';
 import type { EnrichJob } from './types.js';
@@ -46,6 +47,6 @@ export async function handleEnrich(job: PgBoss.Job<EnrichJob>, boss: PgBoss): Pr
   });
 
   logger.info({ crawlId, pages: rows.length }, 'enrich finished');
-  await boss.send('score', { crawlId });
+  await sendNext(boss, 'score', { crawlId });
   await db.update(crawls).set({ status: 'running' }).where(eq(crawls.id, crawlId));
 }

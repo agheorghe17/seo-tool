@@ -1,5 +1,5 @@
 import type PgBoss from 'pg-boss';
-import { and, avg, count, eq } from 'drizzle-orm';
+import { and, avg, count, desc, eq, inArray } from 'drizzle-orm';
 import {
   crawls,
   db,
@@ -9,11 +9,13 @@ import {
   siteSecrets,
   sites,
   trafficEstimates,
+  users,
 } from 'db';
 import { gsc } from 'connectors';
 import { estimateTraffic } from 'estimator';
 import { decryptSecret, estimatedClicks, type ScoreCategory } from 'shared';
 import { logger } from '../logger.js';
+import { sendCrawlDoneEmail } from '../lib/email.js';
 import type { EstimateJob } from './types.js';
 
 const HORIZON = Number(process.env.ESTIMATE_HORIZON_MONTHS ?? 6);
@@ -123,8 +125,30 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     .set({ status: 'completed', completedAt: new Date() })
     .where(eq(crawls.id, crawlId));
 
+  await pruneOldCrawls(siteId);
+
+  const [owner] = await db.select({ email: users.email }).from(users).where(eq(users.id, site.userId));
+  if (owner?.email) {
+    const webBase = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
+    await sendCrawlDoneEmail(owner.email, site.domain, `${webBase}/sites/${siteId}`);
+  }
+
   logger.info(
     { siteId, crawlId, baselineSource, low: estimate.estimateLow, high: estimate.estimateHigh },
     'estimate finished — pipeline complete',
   );
+}
+
+/** Epic 11.4 — keep only the most recent N crawls per site (stay within the free DB tier). */
+const KEEP_CRAWLS = Number(process.env.RETAIN_CRAWLS_PER_SITE ?? 5);
+async function pruneOldCrawls(siteId: string): Promise<void> {
+  const rows = await db
+    .select({ id: crawls.id })
+    .from(crawls)
+    .where(eq(crawls.siteId, siteId))
+    .orderBy(desc(crawls.createdAt));
+  const stale = rows.slice(KEEP_CRAWLS).map((r) => r.id);
+  if (stale.length === 0) return;
+  await db.delete(crawls).where(inArray(crawls.id, stale)); // pages/issues/recos cascade
+  logger.info({ siteId, removed: stale.length }, 'pruned old crawls');
 }

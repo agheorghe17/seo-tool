@@ -1,6 +1,8 @@
 import PgBoss from 'pg-boss';
+import { lt, sql } from 'drizzle-orm';
+import { crawls, db, jobRuns } from 'db';
 import { JOB_TYPES } from 'shared';
-import { logger } from './logger.js';
+import { captureError, logger } from './logger.js';
 import { concurrency, handlers } from './jobs/index.js';
 import type { JobPayloads } from './jobs/types.js';
 
@@ -13,8 +15,59 @@ if (!connectionString) {
 const boss = new PgBoss({ connectionString });
 boss.on('error', (err) => logger.error({ err }, 'pg-boss error'));
 
+/** Epic 9.6 — mark crawls that have been stuck for too long as failed. */
+async function sweepStaleCrawls(): Promise<void> {
+  try {
+    const res = await db
+      .update(crawls)
+      .set({ status: 'failed', error: 'stale — worker restarted or job lost', completedAt: sql`now()` })
+      .where(
+        sql`${crawls.status} in ('running','queued') and ${lt(crawls.createdAt, sql`now() - interval '3 hours'`)}`,
+      )
+      .returning({ id: crawls.id });
+    if (res.length > 0) logger.warn({ count: res.length }, 'swept stale crawls');
+  } catch (err) {
+    logger.error({ err }, 'stale crawl sweep failed');
+  }
+}
+
+async function recordRun<T>(
+  type: string,
+  crawlId: string | null,
+  attempts: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = Date.now();
+  const [run] = await db
+    .insert(jobRuns)
+    .values({ type, crawlId, status: 'running', attempts })
+    .returning({ id: jobRuns.id });
+  try {
+    const out = await fn();
+    await db
+      .update(jobRuns)
+      .set({ status: 'ok', durationMs: Date.now() - started, finishedAt: sql`now()` })
+      .where(sql`${jobRuns.id} = ${run!.id}`);
+    return out;
+  } catch (err) {
+    await db
+      .update(jobRuns)
+      .set({
+        status: 'failed',
+        error: String(err).slice(0, 2000),
+        durationMs: Date.now() - started,
+        finishedAt: sql`now()`,
+      })
+      .where(sql`${jobRuns.id} = ${run!.id}`);
+    throw err;
+  }
+}
+
 async function main(): Promise<void> {
   await boss.start();
+  await sweepStaleCrawls();
+  setInterval(() => void sweepStaleCrawls(), 60 * 60 * 1000).unref();
+
   logger.info('worker started, registering handlers');
 
   for (const type of JOB_TYPES) {
@@ -24,12 +77,19 @@ async function main(): Promise<void> {
       { batchSize: concurrency[key] },
       async ([job]) => {
         if (!job) return;
-        const started = Date.now();
+        const crawlId =
+          job.data && typeof job.data === 'object' && 'crawlId' in job.data
+            ? String((job.data as { crawlId?: string }).crawlId ?? '')
+            : null;
+        const attempts = Number((job as { retryCount?: number }).retryCount ?? 0) + 1;
         try {
-          await handlers[key](job as never, boss);
-          logger.debug({ type, jobId: job.id, ms: Date.now() - started }, 'job done');
+          await recordRun(type, crawlId || null, attempts, () =>
+            handlers[key](job as never, boss),
+          );
+          logger.debug({ type, jobId: job.id }, 'job done');
         } catch (err) {
-          logger.error({ err, type, jobId: job.id }, 'job failed');
+          logger.error({ err, type, jobId: job.id, attempts }, 'job failed');
+          captureError(err, { type, jobId: job.id, crawlId });
           throw err; // let pg-boss retry with backoff
         }
       },

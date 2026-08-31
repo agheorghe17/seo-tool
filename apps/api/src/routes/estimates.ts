@@ -5,6 +5,7 @@ import { encryptSecret } from 'shared';
 import { gsc } from 'connectors';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
+import { recordAudit } from '../lib/audit.js';
 import { enqueue } from '../queue.js';
 import { getEnv } from '../env.js';
 
@@ -52,6 +53,7 @@ export async function estimateRoutes(app: FastifyInstance): Promise<void> {
           .set({ gscConnected: true, gscProperty: site?.gscProperty ?? `sc-domain:${site?.domain}` })
           .where(eq(sites.id, siteId));
 
+        await recordAudit(null, 'site.gsc.connect', siteId);
         return reply.redirect(`${web}/sites/${siteId}?gsc=connected`);
       } catch {
         return reply.redirect(`${web}/sites/${siteId}?gsc=error`);

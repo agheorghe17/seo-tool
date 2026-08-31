@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { and, avg, count, desc, eq, sql } from 'drizzle-orm';
-import { crawls, db, issues, pages, sites } from 'db';
+import { crawls, db, issues, pages, sites, users } from 'db';
 import { requireAuth } from '../middleware/auth.js';
+import { recordAudit } from '../lib/audit.js';
 import { enqueue } from '../queue.js';
 
 async function ownedCrawl(userId: string, crawlId: string) {
@@ -26,6 +27,14 @@ export async function crawlRoutes(app: FastifyInstance): Promise<void> {
     if (!site) return reply.code(404).send({ error: 'not found' });
     if (!site.verifiedAt) return reply.code(409).send({ error: 'site not verified' });
 
+    // Epic 10.3 — monthly page quota.
+    const [me] = await db.select().from(users).where(eq(users.id, req.userId!));
+    if (me && me.quotaUsed >= me.quotaPagesMonth) {
+      return reply
+        .code(429)
+        .send({ error: 'monthly page quota reached', quotaUsed: me.quotaUsed, quota: me.quotaPagesMonth });
+    }
+
     const running = await db
       .select({ id: crawls.id })
       .from(crawls)
@@ -39,6 +48,7 @@ export async function crawlRoutes(app: FastifyInstance): Promise<void> {
       .values({ siteId: site.id, status: 'queued' })
       .returning();
     await enqueue('crawl', { crawlId: crawl!.id, siteId: site.id });
+    await recordAudit(req.userId!, 'crawl.start', crawl!.id, { siteId: site.id });
 
     return reply.code(202).send({ crawlId: crawl!.id, status: 'queued' });
   });

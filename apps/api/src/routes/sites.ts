@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { CONNECTION_TYPES, VERIFICATION_METHODS, encryptSecret } from 'shared';
 import { wordpress } from 'connectors';
 import { requireAuth } from '../middleware/auth.js';
+import { recordAudit } from '../lib/audit.js';
 import { verifyOwnership } from '../lib/verification.js';
 
 const createSiteBody = z.object({
@@ -102,6 +103,7 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
       })
       .returning();
 
+    await recordAudit(req.userId!, 'site.create', row!.id, { domain });
     return reply.code(201).send({ site: row });
   });
 
@@ -124,6 +126,7 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(sites.id, site.id))
       .returning();
 
+    await recordAudit(req.userId!, 'site.verify', site.id, { method: parsed.data.method });
     return { verified: true, site: updated };
   });
 
@@ -170,6 +173,10 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(sites.id, site.id))
       .returning();
 
+    await recordAudit(req.userId!, 'site.wordpress.connect', site.id, {
+      wpSiteUrl: parsed.data.wpSiteUrl,
+      seoPlugin: info.seoPlugin,
+    });
     return { ok: true, types: info.types, seoPlugin: info.seoPlugin, site: updated };
   });
 }

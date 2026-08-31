@@ -4,6 +4,7 @@ import { crawls, db, issues, pages, recommendations, sites } from 'db';
 import { z } from 'zod';
 import { wordpress } from 'connectors';
 import { requireAuth } from '../middleware/auth.js';
+import { recordAudit } from '../lib/audit.js';
 import { loadWpCreds } from '../lib/wpCreds.js';
 
 const applyBody = z.object({
@@ -121,6 +122,7 @@ export async function recommendationRoutes(app: FastifyInstance): Promise<void> 
       .where(eq(recommendations.id, ctx.reco.id))
       .returning();
 
+    await recordAudit(req.userId!, 'recommendation.apply', ctx.reco.id, { ruleId: ctx.ruleId });
     return { applied: true, recommendation: updated };
   });
 
@@ -143,6 +145,7 @@ export async function recommendationRoutes(app: FastifyInstance): Promise<void> 
       .set({ applied: false, appliedAt: null })
       .where(eq(recommendations.id, ctx.reco.id))
       .returning();
+    await recordAudit(req.userId!, 'recommendation.rollback', ctx.reco.id, { ruleId: ctx.ruleId });
     return { rolledBack: true, recommendation: updated };
   });
 }

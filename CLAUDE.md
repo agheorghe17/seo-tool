@@ -111,9 +111,10 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Epics 0-7 implementate la nivel de logică + joburi + endpoints + teste (87 teste, type-check + lint verzi).
-Rămâne: integrarea end-to-end cu Postgres/Supabase (necesită credențiale), UI dashboard (Epic 8),
-fiabilitate coadă (Epic 9), multi-tenant/rate-limit (Epic 10), observabilitate (Epic 11), polish (Epic 12).
-Vezi `EPICS.md` pentru starea per task.
+Toate cele 12 epics implementate la nivel de cod + joburi + endpoints + teste (87 teste; type-check + lint + `web build` verzi).
+Ce rămâne = **verificare end-to-end pe un Postgres real** (creezi proiect Supabase, `.env`, `pnpm db:migrate`,
+`pnpm --filter db policies`), plus deploy cu chei proprii. Rafinamente opționale marcate `[~]` în `EPICS.md`
+(wizard onboarding, branding raport, store Redis pentru rate-limit, teste de izolare RLS).
 
-Migrația inițială: `packages/db/migrations/0000_init.sql` (9 tabele). `pnpm --filter db build` înainte de `db:generate`.
+Migrații: `packages/db/migrations/` (`0000_init`, `0001_ops_tables` — 11 tabele). RLS: `packages/db/sql/policies.sql`.
+`pnpm --filter db build` rulează automat înainte de `db:generate` / `db:push` / `db:studio`.

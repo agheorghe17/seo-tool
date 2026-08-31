@@ -5,6 +5,7 @@ import { getCatalogEntry } from 'scoring';
 import { explainIssue, type StructuredIssue } from 'llm';
 import { prioritise } from 'shared';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import { getCacheStore } from '../redis.js';
 import { runPool } from './pool.js';
 import type { RecommendJob } from './types.js';
@@ -99,5 +100,5 @@ async function enqueueEstimate(boss: PgBoss, crawlId: string): Promise<void> {
     .select({ siteId: crawls.siteId })
     .from(crawls)
     .where(eq(crawls.id, crawlId));
-  if (crawl) await boss.send('estimate', { siteId: crawl.siteId, crawlId });
+  if (crawl) await sendNext(boss, 'estimate', { siteId: crawl.siteId, crawlId });
 }
