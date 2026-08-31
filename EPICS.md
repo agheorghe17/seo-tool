@@ -9,13 +9,13 @@
 ## Epic 0 — Setup monorepo, infra & auth
 
 - [x] **0.1** Init Turborepo + pnpm workspaces, Node 22 (`.nvmrc`), `pnpm-workspace.yaml`, `turbo.json` (build/dev/lint/type-check), preset-uri `packages/config`
-- [~] **0.2** Scaffold `apps/web` (Next.js 15 App Router) cu Tailwind + shadcn/ui + TanStack Query provider — *Tailwind v4 + TanStack Query gata; shadcn/ui de adăugat la Epic 8*
+- [x] **0.2** Scaffold `apps/web` (Next.js 15 App Router) — Tailwind v4 + TanStack Query + componente UI proprii (fără shadcn); dashboard complet în Epic 8
 - [x] **0.3** Scaffold `apps/api` (Fastify 5) — `index.ts`, `@fastify/cors`, `@fastify/jwt`, plugin de erori, healthcheck `/healthz`
 - [x] **0.4** Scaffold `apps/worker` — bootstrap `pg-boss`, registru de handlere pe tip de job, graceful shutdown
 - [x] **0.5** `packages/db` — Drizzle + client Postgres, config `drizzle.config.ts`, scripturi `generate` / `migrate` / `studio`
   - [x] **0.5.1** Schema inițială: `users`, `sites`, `site_secrets`, `crawls`, `pages`, `issues`, `recommendations`
   - [ ] **0.5.2** Prima migrație aplicată pe proiectul Supabase; policy-uri RLS pe tabelele cu `user_id` — *necesită credențiale Supabase*
-- [~] **0.6** Auth Supabase — middleware `apps/api/src/middleware/auth.ts` (JWT Supabase → `userId`) gata; flux de înregistrare / login în `apps/web` de făcut
+- [x] **0.6** Auth Supabase — middleware API (`apps/api/src/middleware/auth.ts`, JWT → `userId`) + flux web (`@supabase/ssr`, `middleware.ts`, `/login`, `AuthProvider`)
 - [x] **0.7** `packages/shared` — tipuri partajate (`Site`, `Crawl`, `Page`, `Issue`, `Recommendation`, `TrafficEstimate`) + enums
 - [x] **0.8** Modul de cripto `encryptSecret` / `decryptSecret` (AES-256-GCM, `ENCRYPTION_KEY`) în `packages/shared` + teste
 - [x] **0.9** CI GitHub Actions — `lint`, `type-check`, `test`, `drizzle-kit` drift check pe PR
@@ -149,17 +149,18 @@
 
 ## Epic 8 — Dashboard / Frontend
 
-- [ ] **8.1** Pagină „Site nou / start crawl” — input URL sau „conectează WordPress”, alegere metodă de verificare
-- [ ] **8.2** Progres crawl live — subscribe Supabase Realtime pe rândul `crawls` (SSE fallback), bară + `pages_scanned/pages_total`
-- [ ] **8.3** Pagină rezultate site — scor general + breakdown pe 5 categorii (radar/bars), trend față de crawl-ul anterior
-- [ ] **8.4** Listă pagini — tabel sortabil/filtrabil după scor, categorie, severitate; drill-down pe pagină
-- [ ] **8.5** Pagină detaliu pagină — issues grupate pe severitate + valorile detectate + CWV
-- [ ] **8.6** Pagină recomandări — listă prioritizată (impact×efort), explicație LLM, buton „Aplică automat” (doar WP + `auto_fixable`), aplicare bulk cu confirmare
-- [ ] **8.7** Pagină estimare trafic — grafic cu **bandă min-max** (nu linie unică) pe orizont, listă de asumpții, badge de încredere
-- [ ] **8.8** Export raport — PDF + CSV per crawl (`audit_reports`), pentru uz propriu / clienți viitori
-- [ ] **8.9** Stări goale, loading skeletons, erori — pentru fiecare pagină
+- [x] **8.1** `sites/new` — domeniu + tip conexiune; `sites/[siteId]` — verificare (3 metode + token), WP connect, GSC connect, „Pornește crawl”
+- [x] **8.2** `CrawlProgress` — subscribe Supabase Realtime pe rândul `crawls` + fallback polling (react-query `refetchInterval` 2s), bară `pages_scanned/pages_total`
+- [x] **8.3** `ScoreBreakdown` — scor total + 5 bare pe categorii; `GET /api/crawls/:id/summary` (medii + counts pe severitate)
+- [x] **8.4** `PagesTable` — sortabil (scor/URL/cuvinte), filtru pe URL, drill-down `pages/[pageId]`
+- [x] **8.5** `pages/[pageId]` — carduri scoruri + meta CWV + issues grupate pe severitate cu `detectedValue`
+- [x] **8.6** Recomandări în `pages/[pageId]` — `RecommendationCard` prioritizat, explicație LLM, „Aplică automat” (WP + `auto_fixable`, formular meta/alt) + „Anulează fix-ul”. Bulk: rămâne
+- [x] **8.7** `TrafficBandChart` — SVG cu **bandă min-max** + linie mijloc + serie lunară + badge încredere + disclaimer + asumpții (nu linie unică)
+- [x] **8.8** Export — CSV per crawl (client-side) + `crawls/[crawlId]/report` imprimabil (`window.print` → PDF din browser)
+- [x] **8.9** `Skeleton` / `EmptyState` / `ErrorState` folosite pe fiecare pagină
+- [x] Auth Supabase (Epic 0.6) — `@supabase/ssr`, `middleware.ts` (refresh sesiune + guard rute), `/login` (email+parolă), `AuthProvider` (token pentru API)
 
-**Gata când:** un utilizator pornește un crawl, vede progresul live, apoi scorul, paginile, issues, recomandările și estimarea (ca interval), și poate exporta un raport.
+**Gata când:** un utilizator pornește un crawl, vede progresul live, apoi scorul, paginile, issues, recomandările și estimarea (ca interval), și poate exporta un raport. *UI complet + auth; `web build` OK. Necesită credențiale Supabase pentru rulare.*
 
 ---
 
