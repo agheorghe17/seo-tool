@@ -15,6 +15,7 @@
     "@fastify/cors": "^10.0.2",
     "@fastify/jwt": "^9.0.3",
     "connectors": "workspace:*",
+    "crawler": "workspace:*",
     "db": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "fastify": "^5.2.1",

@@ -35,6 +35,9 @@ importers:
       connectors:
         specifier: workspace:*
         version: link:../../packages/connectors
+      crawler:
+        specifier: workspace:*
+        version: link:../../packages/crawler
       db:
         specifier: workspace:*
         version: link:../../packages/db

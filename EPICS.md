@@ -28,19 +28,19 @@
 
 ## Epic 1 — Conectare site & verificare proprietate
 
-- [ ] **1.1** `POST /api/sites` — adaugă site (`connection_type`), normalizează domeniul, împiedică duplicate per user
-- [ ] **1.2** Verificare universală — generează `verification_token`; suportă 3 metode:
-  - [ ] **1.2.1** Meta tag în `<head>` (`<meta name="seo-tool-verification" content="...">`)
-  - [ ] **1.2.2** Fișier HTML la `/{token}.html`
-  - [ ] **1.2.3** Înregistrare DNS TXT (`seo-tool-verification=...`) — lookup cu `node:dns`
-- [ ] **1.3** `POST /api/sites/:id/verify` — rulează metoda aleasă, setează `verified_at`, mesaje de eroare clare
-- [ ] **1.4** Conectare WordPress — formular `wp_site_url` + user + Application Password; testează `GET /wp-json/wp/v2/types` + `/users/me`
-  - [ ] **1.4.1** Criptează Application Password în `site_secrets` (kind `wp_app_password`)
-  - [ ] **1.4.2** Detectează pluginul SEO activ (Yoast / RankMath) din `/wp-json/wp/v2/plugins` sau meta pe posts
-- [ ] **1.5** UI onboarding site — pași ghidați per metodă, stare „verificat / neverificat”, re-verificare
-- [ ] **1.6** `GET /api/sites` + `GET /api/sites/:id` — cu status conexiune și ultimul crawl
+- [x] **1.1** `POST /api/sites` — adaugă site (`connection_type`), normalizează domeniul, împiedică duplicate per user
+- [x] **1.2** Verificare universală — generează `verification_token`; suportă 3 metode (`apps/api/src/lib/verification.ts`):
+  - [x] **1.2.1** Meta tag în `<head>` (`<meta name="seo-tool-verification" content="...">`)
+  - [x] **1.2.2** Fișier HTML la `/{token}.html`
+  - [x] **1.2.3** Înregistrare DNS TXT (`seo-tool-verification=...`) — lookup cu `node:dns`
+- [x] **1.3** `POST /api/sites/:id/verify` — rulează metoda aleasă, setează `verified_at`, mesaje de eroare clare
+- [x] **1.4** Conectare WordPress — `POST /api/sites/:id/wordpress`; testează `GET /wp-json/wp/v2/users/me` + `/types`
+  - [x] **1.4.1** Criptează Application Password în `site_secrets` (kind `wp_app_password`)
+  - [x] **1.4.2** Detectează pluginul SEO activ (Yoast / RankMath) din `/wp-json/wp/v2/plugins`
+- [ ] **1.5** UI onboarding site — pași ghidați per metodă, stare „verificat / neverificat”, re-verificare — *amânat la Epic 8 (are nevoie de shell-ul de UI + auth)*
+- [x] **1.6** `GET /api/sites` + `GET /api/sites/:id` — cu status conexiune și ultimul crawl
 
-**Gata când:** un site universal poate fi verificat prin oricare din cele 3 metode; un site WordPress conectat întoarce lista de tipuri de conținut și pluginul SEO detectat.
+**Gata când:** un site universal poate fi verificat prin oricare din cele 3 metode; un site WordPress conectat întoarce lista de tipuri de conținut și pluginul SEO detectat. *Backend + logică pură + teste: gata (10 teste). UI: 1.5.*
 
 ---
 
