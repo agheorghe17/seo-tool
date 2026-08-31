@@ -72,6 +72,13 @@ async function main(): Promise<void> {
   await sweepStaleCrawls();
   setInterval(() => void sweepStaleCrawls(), 60 * 60 * 1000).unref();
 
+  // Epic 19.2 — weekly strategy refresh (fan-out). Idempotent.
+  try {
+    await boss.schedule('strategy-weekly', process.env.RANK_REFRESH_CRON ?? '0 6 * * 1');
+  } catch (err) {
+    logger.warn({ err }, 'could not register strategy-weekly schedule');
+  }
+
   logger.info('worker started, registering handlers');
 
   for (const type of JOB_TYPES) {

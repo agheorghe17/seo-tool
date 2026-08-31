@@ -46,6 +46,7 @@ export const JOB_TYPES = [
   'serp-fetch',
   'strategy-build',
   'rank-refresh',
+  'strategy-weekly',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

@@ -1,21 +1,58 @@
 import type PgBoss from 'pg-boss';
 import { and, eq } from 'drizzle-orm';
-import { competitors, db, keywordData, rankSnapshots } from 'db';
+import { competitors, db, keywordData, pages, rankSnapshots } from 'db';
 import { gsc } from 'connectors';
-import { classifyIntent, strikingDistance, type GscQueryRow } from 'strategy';
+import { classifyIntent, strikingDistance, tokenSimilarity, type GscQueryRow } from 'strategy';
 import { logger } from '../logger.js';
 import { sendNext } from '../queue.js';
-import { GL, HL, gscAccessToken, siteRow } from './strategy-shared.js';
+import { GL, HL, gscAccessToken, latestCompletedCrawlId, ownPageLikes, siteRow } from './strategy-shared.js';
 import type { SiteJob } from './types.js';
 
 function isoDaysAgo(d: number): string {
   return new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
 }
 
+/**
+ * Even without GSC: match each keyword to one of the site's own crawled pages by
+ * title/H1/slug similarity → set has_target_page + target_page_id. This is what lets the
+ * opportunity engine distinguish "optimise an existing page" from "create a new page".
+ */
+async function matchOwnPages(siteId: string): Promise<void> {
+  const crawlId = await latestCompletedCrawlId(siteId);
+  if (!crawlId) return;
+  const pageLikes = await ownPageLikes(crawlId);
+  if (pageLikes.length === 0) return;
+
+  const rows = await db.select({ id: pages.id, url: pages.url }).from(pages).where(eq(pages.crawlId, crawlId));
+  const idByUrl = new Map(rows.map((r) => [r.url, r.id]));
+
+  const kws = await db
+    .select({ id: keywordData.id, keyword: keywordData.keyword })
+    .from(keywordData)
+    .where(eq(keywordData.siteId, siteId));
+
+  for (const kw of kws) {
+    let best: { url: string; sim: number } | null = null;
+    for (const p of pageLikes) {
+      const hay = `${p.title ?? ''} ${p.h1 ?? ''} ${p.url}`;
+      const sim = tokenSimilarity(kw.keyword, hay);
+      if (!best || sim > best.sim) best = { url: p.url, sim };
+    }
+    if (best && best.sim >= 0.34) {
+      await db
+        .update(keywordData)
+        .set({ hasTargetPage: true, targetPageId: idByUrl.get(best.url) ?? null })
+        .where(eq(keywordData.id, kw.id));
+    }
+  }
+}
+
 export async function handleRankImport(job: PgBoss.Job<SiteJob>, boss: PgBoss): Promise<void> {
   const { siteId } = job.data;
   const site = await siteRow(siteId);
   if (!site) throw new Error(`site ${siteId} not found`);
+
+  await matchOwnPages(siteId);
 
   const kickCompetitorsAndBuild = async () => {
     const comps = await db
@@ -27,7 +64,7 @@ export async function handleRankImport(job: PgBoss.Job<SiteJob>, boss: PgBoss): 
   };
 
   if (!site.gscConnected || !site.gscProperty) {
-    logger.info({ siteId }, 'rank-import: GSC not connected, skipping to strategy-build');
+    logger.info({ siteId }, 'rank-import: GSC not connected (own-page match only)');
     await kickCompetitorsAndBuild();
     return;
   }

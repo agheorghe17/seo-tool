@@ -5,7 +5,9 @@ import type { KeywordBucket, KeywordInput } from './types.js';
  * NOT a promised position or traffic number.
  *
  *   score = volume_norm(0..1) * relevance(0..1) * achievability(0..1) * page_factor
- * where achievability rewards low competition and being already close (striking distance).
+ *
+ * Degrades gracefully when there's no volume data (no Keyword Planner) and no position data
+ * (no GSC): it then ranks on business relevance + whether you already have a page.
  */
 export interface OpportunityResult {
   keyword: string;
@@ -14,10 +16,12 @@ export interface OpportunityResult {
   reasons: string[];
 }
 
+/** `null`/`undefined` = unknown (no data source) → neutral; `0`/negative = genuinely no demand. */
 function volumeNorm(v: number | null | undefined): number {
-  if (!v || v <= 0) return 0.05;
+  if (v == null) return 0.4; // unknown — don't punish
+  if (v <= 0) return 0.08;
   // log scale: 10 -> ~0.15, 100 -> ~0.4, 1000 -> ~0.7, 10000+ -> ~1
-  return Math.max(0.05, Math.min(1, Math.log10(v) / 4));
+  return Math.max(0.08, Math.min(1, Math.log10(v) / 4));
 }
 
 function achievability(kw: KeywordInput): number {
@@ -37,7 +41,7 @@ export function scoreOpportunity(kw: KeywordInput): OpportunityResult {
   const vol = volumeNorm(kw.searchVolume);
   const rel = Math.max(0, Math.min(100, kw.businessRelevance ?? 50)) / 100;
   const ach = achievability(kw);
-  const pageFactor = kw.hasTargetPage ? 1 : 0.7;
+  const pageFactor = kw.hasTargetPage ? 1 : 0.8;
 
   const score = Math.round(vol * rel * ach * pageFactor * 100);
 
@@ -48,14 +52,19 @@ export function scoreOpportunity(kw: KeywordInput): OpportunityResult {
     reasons.push(`ești deja pe poziția ${Math.round(kw.currentPosition)} — aproape de prima pagină`);
   if ((kw.competition ?? 0.5) <= 0.35) reasons.push('competiție scăzută');
   if (!kw.hasTargetPage) reasons.push('nu ai încă o pagină dedicată — oportunitate de conținut nou');
+  else reasons.push('ai deja o pagină pe acest subiect — mai are nevoie de optimizare');
 
-  let bucket: KeywordBucket = 'none';
   const pos = kw.currentPosition;
-  if (pos != null && pos > 3 && pos <= 20 && (kw.competition ?? 1) <= 0.6 && rel >= 0.4) {
-    bucket = 'quick_win';
-  } else if (!kw.hasTargetPage && (kw.searchVolume ?? 0) >= 50 && rel >= 0.4) {
-    bucket = 'build_content';
-  } else if (score >= 20) {
+  const noVolumeData = kw.searchVolume == null;
+  let bucket: KeywordBucket = 'none';
+
+  if (pos != null && pos > 3 && pos <= 20 && (kw.competition ?? 1) <= 0.7 && rel >= 0.35) {
+    bucket = 'quick_win'; // striking distance — optimise the existing page
+  } else if (kw.hasTargetPage && rel >= 0.4 && (noVolumeData || (kw.searchVolume ?? 0) >= 20)) {
+    bucket = 'quick_win'; // you have a page for it — worth polishing even without GSC data
+  } else if (!kw.hasTargetPage && rel >= 0.4 && (noVolumeData || (kw.searchVolume ?? 0) >= 30)) {
+    bucket = 'build_content'; // relevant, no page yet — create one
+  } else if (rel >= 0.3 && score >= 12) {
     bucket = 'long_game';
   }
 

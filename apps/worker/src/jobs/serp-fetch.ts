@@ -1,5 +1,5 @@
 import type PgBoss from 'pg-boss';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { competitors, db, keywordData, rankSnapshots, serpResults } from 'db';
 import { getSerpProvider, serpEnabled, type SerpItem } from 'connectors';
 import { logger } from '../logger.js';
@@ -32,7 +32,12 @@ export async function handleSerpFetch(job: PgBoss.Job<SiteJob>): Promise<void> {
   const tracked = await db
     .select({ id: keywordData.id, keyword: keywordData.keyword })
     .from(keywordData)
-    .where(eq(keywordData.bucket, 'tracked'))
+    .where(
+      and(
+        eq(keywordData.siteId, siteId),
+        inArray(keywordData.bucket, ['quick_win', 'build_content', 'tracked']),
+      ),
+    )
     .limit(MAX);
 
   if (tracked.length === 0) {

@@ -22,7 +22,6 @@ import { logger } from '../logger.js';
 import { latestCompletedCrawlId, ownPageLikes } from './strategy-shared.js';
 import type { StrategyBuildJob } from './types.js';
 
-const TRACK_LIMIT = Number(process.env.SERP_MAX_KEYWORDS ?? 200);
 const PLAYBOOK_TOP = Number(process.env.PLAYBOOK_TOP ?? 15);
 
 const PLAYBOOK_SYSTEM = [
@@ -61,7 +60,8 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
   const inputs: (KeywordInput & { id: string })[] = kws.map((k) => ({
     id: k.id,
     keyword: k.keyword,
-    searchVolume: k.searchVolume,
+    // 0 stored when there is no Keyword Planner data → treat as "unknown", not "no demand".
+    searchVolume: k.expansionSource === 'keyword_planner' || k.searchVolume > 0 ? k.searchVolume : null,
     competition: k.competition,
     currentPosition: k.currentPosition,
     businessRelevance: k.businessRelevance,
@@ -81,20 +81,7 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
       .where(eq(keywordData.id, k.id));
   }
 
-  // 2) Mark the top opportunities for SERP tracking (bounded).
-  const toTrack = scored
-    .filter((s) => s.bucket === 'quick_win' || s.bucket === 'build_content')
-    .slice(0, TRACK_LIMIT)
-    .map((s) => s.keyword);
-  if (toTrack.length > 0) {
-    const ids = kws.filter((k) => toTrack.includes(k.keyword)).map((k) => k.id);
-    // only flip 'none'/'long_game' rows to 'tracked'; leave quick_win labels intact for the UI
-    await db
-      .update(keywordData)
-      .set({ bucket: 'tracked' })
-      .where(inArray(keywordData.id, ids));
-  }
-
+  // SERP tracking (Epic 19) picks up quick_win + build_content keywords directly — see serp-fetch.
   if (!full) {
     logger.info({ siteId, keywords: kws.length }, 'strategy-build (rescore) done');
     return;
@@ -181,13 +168,17 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
       };
     }
     const checklist = buildChecklist(opp.keyword, kwRow, gap);
-    await db.insert(keywordPlaybooks).values({
-      keywordId: kwRow.id,
-      targetPageId: kwRow.targetPageId ?? null,
-      brief,
-      checklist,
-      llmProvider: process.env.LLM_PROVIDER ?? 'none',
-    });
+    // Tolerate a concurrent keyword delete (FK) — one bad row must not fail the job.
+    await db
+      .insert(keywordPlaybooks)
+      .values({
+        keywordId: kwRow.id,
+        targetPageId: kwRow.targetPageId ?? null,
+        brief,
+        checklist,
+        llmProvider: process.env.LLM_PROVIDER ?? 'none',
+      })
+      .catch((err) => logger.warn({ err, keyword: opp.keyword }, 'playbook insert skipped'));
   }
 
   // 5) Roadmap 30/60/90.
@@ -209,16 +200,19 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
   let order = 0;
   for (const it of roadmap.items ?? []) {
     const kwRow = it.keyword ? kws.find((k) => k.keyword === it.keyword) : undefined;
-    await db.insert(roadmapItems).values({
-      siteId,
-      keywordId: kwRow?.id ?? null,
-      phase: [30, 60, 90].includes(it.phase) ? it.phase : 30,
-      title: it.title.slice(0, 200),
-      why: it.why ?? null,
-      effort: clamp15(it.effort ?? 3),
-      impact: clamp15(it.impact ?? 3),
-      sortOrder: order++,
-    });
+    await db
+      .insert(roadmapItems)
+      .values({
+        siteId,
+        keywordId: kwRow?.id ?? null,
+        phase: [30, 60, 90].includes(it.phase) ? it.phase : 30,
+        title: (it.title ?? 'Acțiune').slice(0, 200),
+        why: it.why ?? null,
+        effort: clamp15(it.effort ?? 3),
+        impact: clamp15(it.impact ?? 3),
+        sortOrder: order++,
+      })
+      .catch((err) => logger.warn({ err }, 'roadmap insert skipped'));
   }
 
   logger.info(

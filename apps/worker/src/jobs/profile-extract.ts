@@ -4,6 +4,7 @@ import { businessProfiles, db } from 'db';
 import { completeJson } from 'llm';
 import { tokens } from 'strategy';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import { latestCompletedCrawlId, ownPageLikes, siteRow } from './strategy-shared.js';
 import type { ProfileExtractJob } from './types.js';
 
@@ -19,7 +20,10 @@ const SYSTEM = [
   'Nu inventa servicii care nu apar in date. `services` = 3-12 servicii concrete oferite.',
 ].join('\n');
 
-export async function handleProfileExtract(job: PgBoss.Job<ProfileExtractJob>): Promise<void> {
+export async function handleProfileExtract(
+  job: PgBoss.Job<ProfileExtractJob>,
+  boss: PgBoss,
+): Promise<void> {
   const { siteId } = job.data;
   const site = await siteRow(siteId);
   if (!site) throw new Error(`site ${siteId} not found`);
@@ -27,6 +31,7 @@ export async function handleProfileExtract(job: PgBoss.Job<ProfileExtractJob>): 
   const crawlId = job.data.crawlId ?? (await latestCompletedCrawlId(siteId));
   if (!crawlId) {
     logger.warn({ siteId }, 'profile-extract: no completed crawl');
+    await sendNext(boss, 'keyword-research', { siteId });
     return;
   }
   const pageLikes = await ownPageLikes(crawlId);
@@ -47,21 +52,32 @@ export async function handleProfileExtract(job: PgBoss.Job<ProfileExtractJob>): 
   }>(SYSTEM, JSON.stringify({ domain: site.domain, pages: structured }), { maxTokens: 900 });
 
   if (!profile) {
-    // Heuristic fallback: services from /servicii* slugs + page titles; locations from city mentions.
+    // Heuristic fallback (no LLM): every non-utility page's H1/title is a candidate service/topic.
+    const UTILITY =
+      /(contact|despre|about|termeni|terms|privacy|confidential|cookie|blog|articol|news|cos|checkout|cont|login|autentificare|404|sitemap|\.xml|feed|rss|wp-|category|tag\/|author\/)/i;
     const services = new Set<string>();
     const locations = new Set<string>();
     for (const p of pageLikes) {
       const path = safePath(p.url);
-      if (/servic/i.test(path) || /servic/i.test(p.title ?? '')) {
-        const label = (p.h1 ?? p.title ?? '').replace(/\s*[|\-–—:].*$/, '').trim();
-        if (label && label.length <= 60) services.add(label);
-      }
       const hay = tokens(`${p.title ?? ''} ${p.h1 ?? ''} ${path}`);
       for (const c of RO_CITIES) if (hay.includes(c.split(' ')[0]!)) locations.add(cap(c));
+
+      if (path === '/' || path === '') continue;
+      if (UTILITY.test(path) || UTILITY.test(p.title ?? '')) continue;
+      const label = (p.h1 ?? p.title ?? '')
+        .replace(/\s*[|\-–—:•].*$/, '')
+        .replace(new RegExp(site.domain.split('.')[0]!, 'ig'), '')
+        .trim();
+      if (label.length >= 4 && label.length <= 70 && tokens(label).length >= 1) services.add(label);
+    }
+    // Also mine homepage H2s (often a services list).
+    const home = pageLikes.find((p) => safePath(p.url) === '/' || safePath(p.url) === '');
+    for (const h of home?.headings ?? []) {
+      if (h.level === 2 && h.text.length >= 4 && h.text.length <= 70) services.add(h.text.trim());
     }
     profile = {
       summary: `Site-ul ${site.domain}.`,
-      services: [...services].slice(0, 12),
+      services: [...services].slice(0, 15),
       locations: [...locations],
       languages: ['ro'],
     };
@@ -91,6 +107,7 @@ export async function handleProfileExtract(job: PgBoss.Job<ProfileExtractJob>): 
   }
 
   logger.info({ siteId, services: profile.services?.length ?? 0 }, 'profile-extract done');
+  await sendNext(boss, 'keyword-research', { siteId });
 }
 
 function safePath(url: string): string {

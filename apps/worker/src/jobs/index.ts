@@ -13,6 +13,7 @@ import { handleCompetitorCrawl } from './competitor-crawl.js';
 import { handleSerpFetch } from './serp-fetch.js';
 import { handleStrategyBuild } from './strategy-build.js';
 import { handleRankRefresh } from './rank-refresh.js';
+import { handleStrategyWeekly } from './strategy-weekly.js';
 import type { JobPayloads } from './types.js';
 
 /**
@@ -40,13 +41,14 @@ export const handlers: { [K in keyof JobPayloads]: Handler<K> } = {
   recommend: handleRecommend,
   estimate: (job) => handleEstimate(job),
   'wp-apply': notImplemented('wp-apply'),
-  'profile-extract': (job) => handleProfileExtract(job),
+  'profile-extract': (job, boss) => handleProfileExtract(job, boss),
   'keyword-research': handleKeywordResearch,
   'rank-import': handleRankImport,
   'competitor-crawl': handleCompetitorCrawl,
   'serp-fetch': (job) => handleSerpFetch(job),
   'strategy-build': (job) => handleStrategyBuild(job),
   'rank-refresh': handleRankRefresh,
+  'strategy-weekly': (job, boss) => handleStrategyWeekly(job, boss),
 };
 
 /** Per-job-type concurrency (Epic 9.1). Crawls / render are heaviest → keep low. */
@@ -65,4 +67,5 @@ export const concurrency: Record<keyof JobPayloads, number> = {
   'serp-fetch': 1,
   'strategy-build': 2,
   'rank-refresh': 1,
+  'strategy-weekly': 1,
 };

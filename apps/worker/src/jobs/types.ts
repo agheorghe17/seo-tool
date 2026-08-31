@@ -59,6 +59,7 @@ export interface JobPayloads {
   'serp-fetch': SiteJob;
   'strategy-build': StrategyBuildJob;
   'rank-refresh': SiteJob;
+  'strategy-weekly': Record<string, never>;
 }
 
 export type { JobType };
