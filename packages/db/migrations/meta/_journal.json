@@ -22,6 +22,13 @@
       "when": 1788212294500,
       "tag": "0002_strategy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788213160670,
+      "tag": "0003_strategy_uq",
+      "breakpoints": true
     }
   ]
 }

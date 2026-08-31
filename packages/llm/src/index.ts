@@ -9,6 +9,7 @@ import type { Explanation, LlmAdapter, LlmCache, StructuredIssue } from './types
 export * from './types.js';
 export { explanationIsGrounded } from './guardrail.js';
 export { SYSTEM_PROMPT, buildUserPrompt, parseExplanationJson } from './prompt.js';
+export { completeText, completeJson, type CompleteOptions } from './complete.js';
 
 const ADAPTERS: Record<LlmProvider, LlmAdapter> = {
   none: noneAdapter,

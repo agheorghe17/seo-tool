@@ -38,6 +38,14 @@ export const JOB_TYPES = [
   'recommend',
   'estimate',
   'wp-apply',
+  // Strategy module (Epics 13-19)
+  'profile-extract',
+  'keyword-research',
+  'rank-import',
+  'competitor-crawl',
+  'serp-fetch',
+  'strategy-build',
+  'rank-refresh',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

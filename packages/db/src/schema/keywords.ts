@@ -1,5 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, pgTable, real, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  real,
+  smallint,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import {
   expansionSourceEnum,
   keywordBucketEnum,
@@ -37,7 +48,7 @@ export const keywordData = pgTable(
     hl: text('hl').notNull().default(sql`'ro'`),
   },
   (t) => [
-    index('keyword_data_site_idx').on(t.siteId, t.keyword),
+    uniqueIndex('keyword_data_site_keyword_uq').on(t.siteId, t.keyword),
     index('keyword_data_site_bucket_idx').on(t.siteId, t.bucket),
   ],
 );

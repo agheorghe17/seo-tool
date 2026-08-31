@@ -6,12 +6,19 @@ import { handleEstimate } from './estimate.js';
 import { handleRecommend } from './recommend.js';
 import { handleRender } from './render.js';
 import { handleScore } from './score.js';
+import { handleProfileExtract } from './profile-extract.js';
+import { handleKeywordResearch } from './keyword-research.js';
+import { handleRankImport } from './rank-import.js';
+import { handleCompetitorCrawl } from './competitor-crawl.js';
+import { handleSerpFetch } from './serp-fetch.js';
+import { handleStrategyBuild } from './strategy-build.js';
+import { handleRankRefresh } from './rank-refresh.js';
 import type { JobPayloads } from './types.js';
 
 /**
- * Epic 9 fills these in. Each handler does its unit of work then enqueues the next
- * stage of the pipeline: crawl → enrich → score → recommend → estimate.
- * `render` is a fan-out sub-job of `crawl`; `wp-apply` is triggered from the API.
+ * Audit pipeline:    crawl → enrich → score → recommend → estimate  (+ render fan-out, wp-apply)
+ * Strategy pipeline: profile-extract → keyword-research → rank-import → competitor-crawl* → strategy-build
+ *                    rank-refresh (weekly) re-runs rank-import + serp-fetch + strategy-build(rescore)
  */
 
 type Handler<K extends keyof JobPayloads> = (
@@ -33,9 +40,16 @@ export const handlers: { [K in keyof JobPayloads]: Handler<K> } = {
   recommend: handleRecommend,
   estimate: (job) => handleEstimate(job),
   'wp-apply': notImplemented('wp-apply'),
+  'profile-extract': (job) => handleProfileExtract(job),
+  'keyword-research': handleKeywordResearch,
+  'rank-import': handleRankImport,
+  'competitor-crawl': handleCompetitorCrawl,
+  'serp-fetch': (job) => handleSerpFetch(job),
+  'strategy-build': (job) => handleStrategyBuild(job),
+  'rank-refresh': handleRankRefresh,
 };
 
-/** Per-job-type concurrency (Epic 9.1). Render is heaviest → keep it low. */
+/** Per-job-type concurrency (Epic 9.1). Crawls / render are heaviest → keep low. */
 export const concurrency: Record<keyof JobPayloads, number> = {
   crawl: 2,
   render: 1,
@@ -44,4 +58,11 @@ export const concurrency: Record<keyof JobPayloads, number> = {
   recommend: 2,
   estimate: 2,
   'wp-apply': 2,
+  'profile-extract': 2,
+  'keyword-research': 1,
+  'rank-import': 2,
+  'competitor-crawl': 1,
+  'serp-fetch': 1,
+  'strategy-build': 2,
+  'rank-refresh': 1,
 };

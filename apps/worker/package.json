@@ -23,7 +23,8 @@
     "pg-boss": "^10.1.6",
     "pino": "^9.6.0",
     "scoring": "workspace:*",
-    "shared": "workspace:*"
+    "shared": "workspace:*",
+    "strategy": "workspace:*"
   },
   "devDependencies": {
     "config": "workspace:*",
