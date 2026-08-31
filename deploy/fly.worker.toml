@@ -1,0 +1,20 @@
+# Fly.io config for the worker (pg-boss consumers). Deploy from repo root:
+#   fly deploy -c deploy/fly.worker.toml
+# The worker has no HTTP service; it stays running to drain the queue.
+app = "seo-tool-worker"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../deploy/Dockerfile.node"
+  [build.args]
+    APP = "worker"
+
+[env]
+  NODE_ENV = "production"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# Epic 3.1: a SEPARATE render app (Playwright/Chromium) with more memory and
+# auto_stop_machines = "stop" so it scales to zero between render jobs.

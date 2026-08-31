@@ -1,0 +1,25 @@
+# Fly.io config for the API. Deploy from repo root:
+#   fly deploy -c deploy/fly.api.toml
+# Secrets (set once): fly secrets set DATABASE_URL=... ENCRYPTION_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=...
+app = "seo-tool-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../deploy/Dockerfile.node"
+  [build.args]
+    APP = "api"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

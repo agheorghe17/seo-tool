@@ -1,0 +1,66 @@
+import {
+  SCORE_CATEGORIES,
+  clampScore,
+  weightedTotal,
+  type CategoryScores,
+  type CategoryWeights,
+  type PageData,
+  type ScoreCategory,
+} from 'shared';
+import { ALL_RULES } from './rules/index.js';
+import type { Rule, RuleContext, RuleIssue } from './rule.js';
+
+export interface ScoreResult {
+  scores: CategoryScores;
+  issues: RuleIssue[];
+}
+
+function emptyPenalties(): Record<ScoreCategory, number> {
+  return { technical: 0, cwv: 0, onpage: 0, content: 0, geo: 0 };
+}
+
+/**
+ * Run every rule against a page and produce category scores + issues. PURE.
+ * Each category starts at 100 and loses `penalty` points per failed rule (floored at 0).
+ */
+export function scorePage(
+  page: PageData,
+  ctx: RuleContext,
+  opts: { rules?: Rule[]; weights?: CategoryWeights } = {},
+): ScoreResult {
+  const rules = opts.rules ?? ALL_RULES;
+  const penalties = emptyPenalties();
+  const issues: RuleIssue[] = [];
+
+  for (const rule of rules) {
+    const result = rule.check(page, ctx);
+    if (result.passed) continue;
+    penalties[rule.category] += rule.penalty;
+    issues.push({
+      ruleId: rule.id,
+      ruleVersion: rule.version,
+      category: rule.category,
+      severity: rule.severity,
+      description: result.description ?? rule.fixTitle,
+      detectedValue: result.detectedValue ?? null,
+      siteLevel: rule.siteLevel ?? false,
+      fixTitle: rule.fixTitle,
+      impactHint: rule.impactHint,
+      effortHint: rule.effortHint,
+      penalty: rule.penalty,
+    });
+  }
+
+  const perCategory = Object.fromEntries(
+    SCORE_CATEGORIES.map((cat) => [cat, clampScore(100 - penalties[cat])]),
+  ) as Record<ScoreCategory, number>;
+
+  const scores: CategoryScores = {
+    ...perCategory,
+    total: weightedTotal(perCategory, opts.weights),
+  };
+
+  return { scores, issues };
+}
+
+export type { PageData };
