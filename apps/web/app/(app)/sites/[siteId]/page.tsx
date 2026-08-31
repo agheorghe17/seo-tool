@@ -44,14 +44,24 @@ export default function SitePage() {
         title={site.domain}
         subtitle={site.connectionType === 'wordpress' ? 'WordPress conectat' : 'Site universal'}
         actions={
-          site.verified || site.wpSiteUrl ? (
-            <Button
-              disabled={startCrawl.isPending || site.lastCrawl?.status === 'running'}
-              onClick={() => startCrawl.mutate()}
-            >
-              {site.lastCrawl?.status === 'running' ? 'Crawl în curs…' : 'Pornește crawl'}
-            </Button>
-          ) : null
+          <div className="flex gap-2">
+            {(site.verified || site.wpSiteUrl) && (
+              <Link
+                href={`/sites/${siteId}/strategy`}
+                className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium dark:border-neutral-700"
+              >
+                Strategie →
+              </Link>
+            )}
+            {site.verified || site.wpSiteUrl ? (
+              <Button
+                disabled={startCrawl.isPending || site.lastCrawl?.status === 'running'}
+                onClick={() => startCrawl.mutate()}
+              >
+                {site.lastCrawl?.status === 'running' ? 'Crawl în curs…' : 'Pornește crawl'}
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
