@@ -3,7 +3,15 @@
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const SC_ENDPOINT = 'https://searchconsole.googleapis.com/webmasters/v3';
-const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
+/**
+ * Search Console (read) + Google Ads (Keyword Planner search volumes). The `adwords` scope is
+ * only exercised when GOOGLE_ADS_DEVELOPER_TOKEN is set; users who connected before this change
+ * must re-consent ("Reconectează") to grant it.
+ */
+const SCOPE = [
+  'https://www.googleapis.com/auth/webmasters.readonly',
+  'https://www.googleapis.com/auth/adwords',
+].join(' ');
 
 export interface GscOAuthConfig {
   clientId: string;

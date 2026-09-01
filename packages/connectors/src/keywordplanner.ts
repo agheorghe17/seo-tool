@@ -30,7 +30,11 @@ export interface KeywordPlannerOptions {
   pageUrl?: string;
 }
 
-const API_VERSION = 'v18';
+/**
+ * Google Ads API sunsets versions ~yearly. Override with GOOGLE_ADS_API_VERSION when the
+ * default 404s (that's the "version removed" signal). Supported as of 2026-H2: v22–v24.
+ */
+const API_VERSION = process.env.GOOGLE_ADS_API_VERSION ?? 'v22';
 /** geoTargetConstants/2642 = Romania, languageConstants/1038 = Romanian. */
 const RO_GEO = '2642';
 const RO_LANG = '1038';
@@ -73,7 +77,8 @@ export async function fetchKeywordIdeas(
     geoTargetConstants: [`geoTargetConstants/${opts.geoTargetConstantId ?? RO_GEO}`],
     language: `languageConstants/${opts.languageConstantId ?? RO_LANG}`,
     keywordPlanNetwork: 'GOOGLE_SEARCH',
-    pageSize: 1000,
+    // NOTE: generateKeywordIdeas rejects `pageSize` in the request body (INVALID_ARGUMENT
+    // on v20+); it returns the full idea set and we cap downstream.
   };
   if (opts.pageUrl) body.urlSeed = { url: opts.pageUrl };
 
