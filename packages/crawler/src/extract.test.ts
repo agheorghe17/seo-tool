@@ -62,6 +62,17 @@ describe('extractPage', () => {
     expect(page.externalLinksCount).toBe(1);
   });
 
+  it('captures internal links with anchor text and trimmed main text', () => {
+    expect(page.internalLinks).toEqual(
+      expect.arrayContaining([
+        { url: 'https://example.com/nav-link', anchor: 'nav' },
+        { url: 'https://example.com/about', anchor: 'About' },
+      ]),
+    );
+    expect(page.mainText).toContain('widgets here');
+    expect((page.mainText ?? '').length).toBeLessThanOrEqual(8000);
+  });
+
   it('flattens JSON-LD @type including @graph and arrays', () => {
     expect(page.schemaTypes.sort()).toEqual(
       ['BreadcrumbList', 'FAQPage', 'Product', 'WebPage'].sort(),

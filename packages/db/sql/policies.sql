@@ -101,6 +101,9 @@ alter table keyword_playbooks enable row level security;
 alter table roadmap_items     enable row level security;
 alter table content_drafts    enable row level security;
 alter table page_blueprints   enable row level security;
+alter table interventions          enable row level security;
+alter table impact_calibration     enable row level security;
+alter table page_traffic_history   enable row level security;
 
 drop policy if exists business_profiles_owner on business_profiles;
 create policy business_profiles_owner on business_profiles for select using (
@@ -156,6 +159,21 @@ create policy content_drafts_owner on content_drafts for select using (
 drop policy if exists page_blueprints_owner on page_blueprints;
 create policy page_blueprints_owner on page_blueprints for select using (
   exists (select 1 from sites s where s.id = page_blueprints.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists interventions_owner on interventions;
+create policy interventions_owner on interventions for select using (
+  exists (select 1 from sites s where s.id = interventions.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists impact_calibration_owner on impact_calibration;
+create policy impact_calibration_owner on impact_calibration for select using (
+  exists (select 1 from sites s where s.id = impact_calibration.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists page_traffic_history_owner on page_traffic_history;
+create policy page_traffic_history_owner on page_traffic_history for select using (
+  exists (select 1 from sites s where s.id = page_traffic_history.site_id and s.user_id = auth.uid())
 );
 
 -- Realtime: the dashboard subscribes to crawl-row updates for live progress.

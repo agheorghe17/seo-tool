@@ -78,3 +78,20 @@ export const blueprintStatusEnum = pgEnum('blueprint_status', [
   'applied',
   'dismissed',
 ]);
+
+// --- Results engine (Epic 23) ---
+export const interventionKindEnum = pgEnum('intervention_kind', [
+  'blueprint',
+  'recommendation',
+  'content',
+  'roadmap',
+  'internal_link',
+  'manual',
+]);
+export const interventionOutcomeEnum = pgEnum('intervention_outcome', [
+  'pending',
+  'gain',
+  'loss',
+  'flat',
+  'inconclusive',
+]);

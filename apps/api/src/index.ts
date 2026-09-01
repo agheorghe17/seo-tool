@@ -10,6 +10,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { contentRoutes } from './routes/content.js';
 import { healthRoutes } from './routes/health.js';
 import { homeRoutes } from './routes/home.js';
+import { insightsRoutes } from './routes/insights.js';
 import { meRoutes } from './routes/me.js';
 import { planRoutes } from './routes/plan.js';
 import { recommendationRoutes } from './routes/recommendations.js';
@@ -77,6 +78,7 @@ await app.register(homeRoutes);
 await app.register(contentRoutes);
 await app.register(analyticsRoutes);
 await app.register(planRoutes);
+await app.register(insightsRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateTraffic } from './model.js';
+import { backtestEstimate, estimateTraffic } from './model.js';
 import { assertNoUnrealisticGrowth, rampFraction, UnrealisticGrowthError } from './rampup.js';
 import { totalUpliftFraction } from './impact.js';
 
@@ -112,5 +112,26 @@ describe('totalUpliftFraction', () => {
     expect(b.high).toBeGreaterThan(a.high);
     expect(b.high).toBeLessThan(0.2); // single category stays small
     expect(a.low).toBe(0);
+  });
+});
+
+describe('backtestEstimate', () => {
+  const prev = estimateTraffic(baseInput).series;
+
+  it('reports whether reality landed inside the previous projection band', () => {
+    const b = backtestEstimate(prev, 60, 1000)!;
+    expect(b.agoDays).toBe(60);
+    expect(b.projectedLow).toBeLessThanOrEqual(b.projectedHigh);
+    expect(typeof b.withinBand).toBe('boolean');
+  });
+
+  it('flags an actual far above the band as out of band', () => {
+    const b = backtestEstimate(prev, 90, 999999)!;
+    expect(b.withinBand).toBe(false);
+    expect(b.actual).toBe(999999);
+  });
+
+  it('returns null when too little time has passed', () => {
+    expect(backtestEstimate(prev, 5, 1000)).toBeNull();
   });
 });

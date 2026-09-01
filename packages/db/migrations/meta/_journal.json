@@ -43,6 +43,13 @@
       "when": 1788257379186,
       "tag": "0005_clumsy_pyro",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788265108592,
+      "tag": "0006_striped_lyja",
+      "breakpoints": true
     }
   ]
 }

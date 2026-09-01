@@ -34,13 +34,14 @@ async function sweepStaleCrawls(): Promise<void> {
 async function recordRun<T>(
   type: string,
   crawlId: string | null,
+  siteId: string | null,
   attempts: number,
   fn: () => Promise<T>,
 ): Promise<T> {
   const started = Date.now();
   const [run] = await db
     .insert(jobRuns)
-    .values({ type, crawlId, status: 'running', attempts })
+    .values({ type, crawlId, siteId, status: 'running', attempts })
     .returning({ id: jobRuns.id });
   try {
     const out = await fn();
@@ -88,13 +89,12 @@ async function main(): Promise<void> {
       { batchSize: concurrency[key] },
       async ([job]) => {
         if (!job) return;
-        const crawlId =
-          job.data && typeof job.data === 'object' && 'crawlId' in job.data
-            ? String((job.data as { crawlId?: string }).crawlId ?? '')
-            : null;
+        const data = (job.data ?? {}) as { crawlId?: string; siteId?: string };
+        const crawlId = data && typeof data === 'object' && 'crawlId' in data ? String(data.crawlId ?? '') : null;
+        const siteId = data && typeof data === 'object' && 'siteId' in data ? String(data.siteId ?? '') : null;
         const attempts = Number((job as { retryCount?: number }).retryCount ?? 0) + 1;
         try {
-          await recordRun(type, crawlId || null, attempts, () =>
+          await recordRun(type, crawlId || null, siteId || null, attempts, () =>
             handlers[key](job as never, boss),
           );
           logger.debug({ type, jobId: job.id }, 'job done');

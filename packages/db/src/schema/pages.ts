@@ -39,6 +39,10 @@ export const pages = pgTable(
     images: jsonb('images_json').$type<PageImage[]>().default([]),
     internalLinksCount: integer('internal_links_count').notNull().default(0),
     externalLinksCount: integer('external_links_count').notNull().default(0),
+    // Epic 23 — outbound same-host links (with anchor) + trimmed main text, for the
+    // internal-link engine and the content-decay refresh briefs.
+    internalLinks: jsonb('internal_links').$type<{ url: string; anchor: string }[]>().default([]),
+    mainText: text('main_text'),
 
     lcpMs: integer('lcp_ms'),
     inpMs: integer('inp_ms'),

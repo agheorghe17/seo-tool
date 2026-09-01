@@ -1,9 +1,20 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, eq } from 'drizzle-orm';
-import { businessProfiles, db, pageBlueprints, sites, trafficEstimates } from 'db';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import {
+  businessProfiles,
+  crawls,
+  db,
+  keywordData,
+  pageBlueprints,
+  pages,
+  sites,
+  trafficEstimates,
+} from 'db';
 import { wordpress } from 'connectors';
+import { resolveCannibalization, type CannibalPage } from 'strategy';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
+import { recordIntervention } from '../lib/interventions.js';
 import { enqueue } from '../queue.js';
 import { loadWpCreds } from '../lib/wpCreds.js';
 
@@ -25,6 +36,61 @@ async function ownedBlueprint(userId: string, bpId: string) {
 }
 
 type Recommended = NonNullable<(typeof pageBlueprints.$inferSelect)['recommended']>;
+
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+async function buildCannibalizationGroups(
+  siteId: string,
+  blueprints: (typeof pageBlueprints.$inferSelect)[],
+) {
+  const byKw = new Map<string, typeof blueprints>();
+  for (const b of blueprints) {
+    if (!b.targetKeyword) continue;
+    const k = norm(b.targetKeyword);
+    const arr = byKw.get(k) ?? [];
+    arr.push(b);
+    byKw.set(k, arr);
+  }
+  const groups = [...byKw.values()].filter((g) => g.length >= 2);
+  if (groups.length === 0) return [];
+
+  const [crawl] = await db
+    .select({ id: crawls.id })
+    .from(crawls)
+    .where(and(eq(crawls.siteId, siteId), inArray(crawls.status, ['completed', 'partial'])))
+    .orderBy(desc(crawls.createdAt))
+    .limit(1);
+  const pageRows = crawl
+    ? await db.select().from(pages).where(eq(pages.crawlId, crawl.id))
+    : [];
+  const pageByUrl = new Map(pageRows.map((p) => [p.url.replace(/\/+$/, ''), p]));
+  const kwRows = await db.select().from(keywordData).where(eq(keywordData.siteId, siteId));
+  const posByKw = new Map(kwRows.map((k) => [norm(k.keyword), k.currentPosition]));
+
+  const out = [];
+  for (const g of groups) {
+    const keyword = g[0]!.targetKeyword!;
+    const group: CannibalPage[] = g.map((b) => {
+      const p = pageByUrl.get(b.url.replace(/\/+$/, ''));
+      return {
+        url: b.url,
+        title: p?.title ?? b.recommended?.title ?? null,
+        h1: p?.h1 ?? null,
+        headings: (p?.headings as { level: number; text: string }[] | null) ?? [],
+        wordCount: p?.wordCount ?? 0,
+        schemaTypes: ((p?.schema as unknown[] | null) ?? []).filter(
+          (x): x is string => typeof x === 'string',
+        ),
+        currentPosition: b.current?.position ?? posByKw.get(norm(keyword)) ?? null,
+      };
+    });
+    const plan = resolveCannibalization(group, keyword);
+    if (plan) out.push(plan);
+  }
+  return out;
+}
 
 export async function planRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
@@ -52,8 +118,12 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
     const est = estRow[0];
     const profile = profileRow[0];
 
+    // Epic 23 — cannibalisation groups: blueprints that share a target keyword.
+    const cannibalizationGroups = await buildCannibalizationGroups(site.id, blueprints);
+
     return {
       blueprints,
+      cannibalizationGroups,
       market: {
         geoCountry: profile?.geoCountry ?? null,
         geoLanguage: profile?.geoLanguage ?? null,
@@ -186,6 +256,14 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(pageBlueprints.id, bp.id))
         .returning();
       await recordAudit(req.userId!, 'blueprint.apply', bp.siteId, { url: bp.url });
+      await recordIntervention({
+        siteId: bp.siteId,
+        kind: 'blueprint',
+        category: 'onpage',
+        targetUrl: bp.url,
+        targetKeywordId: bp.targetKeywordId,
+        label: `Blueprint aplicat: ${bp.targetKeyword ?? bp.url}`,
+      });
       return { blueprint: updated };
     },
   );

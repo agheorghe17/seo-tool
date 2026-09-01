@@ -97,18 +97,30 @@ export function extractPage(input: ExtractInput): PageData {
 
   let internal = 0;
   let external = 0;
+  const internalLinkMap = new Map<string, string>();
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href')!;
     if (/^(mailto:|tel:|javascript:|#)/i.test(href)) return;
     try {
       const u = new URL(href, base);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
-      if (u.host === base.host) internal++;
-      else external++;
+      if (u.host === base.host) {
+        internal++;
+        const clean = `${u.origin}${u.pathname}`.replace(/\/+$/, '') || u.origin;
+        const anchor = $(el).text().replace(/\s+/g, ' ').trim().slice(0, 160);
+        if (!internalLinkMap.has(clean) || (anchor && !internalLinkMap.get(clean))) {
+          internalLinkMap.set(clean, anchor);
+        }
+      } else {
+        external++;
+      }
     } catch {
       /* ignore */
     }
   });
+  const internalLinks = [...internalLinkMap.entries()]
+    .slice(0, 150)
+    .map(([url, anchor]) => ({ url, anchor }));
 
   const text = mainText($);
   const contentHash = createHash('sha256').update(text.toLowerCase()).digest('hex');
@@ -143,6 +155,8 @@ export function extractPage(input: ExtractInput): PageData {
     images,
     internalLinksCount: internal,
     externalLinksCount: external,
+    internalLinks,
+    mainText: text.slice(0, 8000),
     lcpMs: null,
     inpMs: null,
     clsScore: null,

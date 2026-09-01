@@ -14,6 +14,7 @@ import { wordpress } from 'connectors';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
+import { recordIntervention } from '../lib/interventions.js';
 import { loadWpCreds } from '../lib/wpCreds.js';
 
 async function ownedSite(userId: string, siteId: string) {
@@ -299,6 +300,13 @@ export async function contentRoutes(app: FastifyInstance): Promise<void> {
       .returning();
     await recordAudit(req.userId!, 'content.publish_draft', draft.siteId, {
       wpPostId: result.postId,
+    });
+    await recordIntervention({
+      siteId: draft.siteId,
+      kind: 'content',
+      category: 'content',
+      targetKeywordId: draft.keywordId,
+      label: `Articol publicat ca draft: ${draft.title ?? ''}`.trim(),
     });
     return { draft: row, editLink: result.editLink };
   });

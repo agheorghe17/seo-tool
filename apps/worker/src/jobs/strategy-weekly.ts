@@ -15,6 +15,10 @@ export async function handleStrategyWeekly(_job: PgBoss.Job, boss: PgBoss): Prom
     .innerJoin(businessProfiles, eq(businessProfiles.siteId, sites.id))
     .where(and(isNotNull(businessProfiles.confirmedAt)));
 
-  for (const r of rows) await sendNext(boss, 'rank-refresh', { siteId: r.siteId });
+  for (const r of rows) {
+    await sendNext(boss, 'rank-refresh', { siteId: r.siteId });
+    await sendNext(boss, 'traffic-history', { siteId: r.siteId });
+    await sendNext(boss, 'intervention-check', { siteId: r.siteId });
+  }
   logger.info({ sites: rows.length }, 'strategy-weekly fan-out');
 }

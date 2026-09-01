@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { wordpress } from 'connectors';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
+import { recordIntervention } from '../lib/interventions.js';
 import { loadWpCreds } from '../lib/wpCreds.js';
 
 const applyBody = z.object({
@@ -123,6 +124,13 @@ export async function recommendationRoutes(app: FastifyInstance): Promise<void> 
       .returning();
 
     await recordAudit(req.userId!, 'recommendation.apply', ctx.reco.id, { ruleId: ctx.ruleId });
+    await recordIntervention({
+      siteId: ctx.siteId,
+      kind: 'recommendation',
+      category: ctx.ruleId,
+      targetUrl: ctx.pageUrl,
+      label: `Fix aplicat: ${ctx.reco.fixTitle}`,
+    });
     return { applied: true, recommendation: updated };
   });
 

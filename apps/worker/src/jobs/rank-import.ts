@@ -61,6 +61,7 @@ export async function handleRankImport(job: PgBoss.Job<SiteJob>, boss: PgBoss): 
       .where(eq(competitors.siteId, siteId));
     for (const c of comps) await sendNext(boss, 'competitor-crawl', { siteId, competitorId: c.id });
     await sendNext(boss, 'strategy-build', { siteId, full: true });
+    await sendNext(boss, 'traffic-history', { siteId });
   };
 
   if (!site.gscConnected || !site.gscProperty) {

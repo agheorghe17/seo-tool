@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { clusterCoverage, pageContentGap, type PageLike } from 'strategy';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
+import { recordIntervention } from '../lib/interventions.js';
 import { enqueue } from '../queue.js';
 
 async function ownedSite(userId: string, siteId: string) {
@@ -342,6 +343,15 @@ export async function strategyRoutes(app: FastifyInstance): Promise<void> {
         })
         .where(eq(roadmapItems.id, req.params.itemId))
         .returning();
+      if (parsed.data.status === 'done' && row.item.status !== 'done') {
+        await recordIntervention({
+          siteId: row.item.siteId,
+          kind: 'roadmap',
+          category: 'content',
+          targetKeywordId: row.item.keywordId,
+          label: `Plan bifat: ${row.item.title}`,
+        });
+      }
       return { item: updated };
     },
   );

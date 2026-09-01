@@ -7,6 +7,10 @@ import { guessTargetKeyword } from './target-keyword.js';
 import { pageContentGap } from './gap.js';
 import { prioritiseOpportunities, scoreOpportunity } from './opportunity.js';
 import { assignPageTargets, type KeywordCandidate } from './page-target.js';
+import { detectDecay } from './decay.js';
+import { auditInternalLinks } from './internal-links.js';
+import { resolveCannibalization } from './cannibalization.js';
+import { recommendArchitecture } from './architecture.js';
 import type { PageLike } from './types.js';
 
 describe('classifyIntent', () => {
@@ -203,5 +207,88 @@ describe('assignPageTargets', () => {
     ];
     const res = assignPageTargets(pages, kws, { primaryCity: 'Cluj', localEmphasis: true });
     expect(res[0]!.targetKeywordId).toBe('k2');
+  });
+});
+
+describe('detectDecay', () => {
+  it('flags a page with 3+ months of clicks decline from its peak', () => {
+    const h = [
+      { url: 'https://x.ro/ghid', month: '2026-01', clicks: 100, impressions: 2000, position: 4 },
+      { url: 'https://x.ro/ghid', month: '2026-02', clicks: 90, impressions: 1900, position: 5 },
+      { url: 'https://x.ro/ghid', month: '2026-03', clicks: 60, impressions: 1800, position: 8 },
+      { url: 'https://x.ro/ghid', month: '2026-04', clicks: 40, impressions: 1700, position: 11 },
+      { url: 'https://x.ro/ghid', month: '2026-05', clicks: 25, impressions: 1600, position: 14 },
+    ];
+    const [d] = detectDecay(h);
+    expect(d!.url).toBe('https://x.ro/ghid');
+    expect(d!.monthsDeclining).toBeGreaterThanOrEqual(3);
+    expect(d!.clicksDropPct).toBeGreaterThan(0.5);
+  });
+
+  it('does not flag a stable/growing page', () => {
+    const h = [
+      { url: 'https://x.ro/ok', month: '2026-01', clicks: 20, impressions: 400, position: 6 },
+      { url: 'https://x.ro/ok', month: '2026-02', clicks: 24, impressions: 450, position: 6 },
+      { url: 'https://x.ro/ok', month: '2026-03', clicks: 22, impressions: 460, position: 6 },
+      { url: 'https://x.ro/ok', month: '2026-04', clicks: 30, impressions: 500, position: 5 },
+    ];
+    expect(detectDecay(h)).toHaveLength(0);
+  });
+});
+
+describe('auditInternalLinks', () => {
+  it('finds a mention-without-link anchor opportunity and an orphan', () => {
+    const pages = [
+      {
+        url: 'https://x.ro/blog/despre-google-ads',
+        mainText:
+          'servicii google ads sunt utile. cu servicii google ads poti creste. servicii google ads bune costa.',
+        internalLinks: [{ url: 'https://x.ro/blog/', anchor: 'blog' }],
+        clusterId: 'c1',
+      },
+      {
+        url: 'https://x.ro/servicii/google-ads',
+        mainText: 'pagina de serviciu',
+        internalLinks: [],
+        targetKeyword: 'servicii google ads',
+        clusterId: 'c1',
+        opportunityScore: 70,
+      },
+    ];
+    const a = auditInternalLinks(pages);
+    expect(a.anchorOpportunities.some((o) => o.toUrl.endsWith('/servicii/google-ads'))).toBe(true);
+    expect(a.orphans).toContain('https://x.ro/servicii/google-ads');
+    expect(a.plan.length).toBeGreaterThan(0);
+  });
+});
+
+describe('resolveCannibalization', () => {
+  it('picks the best-positioned page as canonical and 301s the rest', () => {
+    const group = [
+      { url: 'https://x.ro/ppc', title: 'PPC', h1: 'PPC', headings: [{ level: 2, text: 'Preturi' }], wordCount: 500, schemaTypes: [], currentPosition: 18 },
+      { url: 'https://x.ro/google-ads', title: 'Google Ads', h1: 'Google Ads', headings: [], wordCount: 900, schemaTypes: [], currentPosition: 7 },
+    ];
+    const plan = resolveCannibalization(group, 'servicii google ads')!;
+    expect(plan.canonicalUrl).toBe('https://x.ro/google-ads');
+    expect(plan.redirects).toEqual([{ from: 'https://x.ro/ppc', to: 'https://x.ro/google-ads' }]);
+    expect(plan.mergeInstructions.length).toBeGreaterThan(0);
+  });
+});
+
+describe('recommendArchitecture', () => {
+  it('separates pillars, supporting and orphan clusters', () => {
+    const clusters = [
+      { id: 'big', name: 'google ads', members: ['a', 'b', 'c', 'd', 'e'] },
+      { id: 'small', name: 'tiktok ads', members: ['x', 'y'] },
+      { id: 'orphan', name: 'linkedin ads', members: ['p', 'q', 'r'] },
+    ];
+    const assignments = [
+      { url: 'https://x.ro/google-ads', targetKeyword: 'a', clusterId: 'big' },
+      { url: 'https://x.ro/tiktok', targetKeyword: 'x', clusterId: 'small' },
+    ];
+    const plan = recommendArchitecture(clusters, assignments);
+    expect(plan.pillars.map((p) => p.clusterId)).toEqual(['big']);
+    expect(plan.orphanClusters.map((o) => o.clusterId)).toContain('orphan');
+    expect(plan.coverage).toEqual({ pillarsNeeded: 1, pillarsHave: 1 });
   });
 });

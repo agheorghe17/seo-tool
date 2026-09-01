@@ -61,6 +61,8 @@ export interface JobPayloads {
   'rank-refresh': SiteJob;
   'strategy-weekly': Record<string, never>;
   'page-plan': SiteJob;
+  'traffic-history': SiteJob;
+  'intervention-check': SiteJob;
 }
 
 export type { JobType };

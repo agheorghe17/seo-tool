@@ -18,6 +18,11 @@ export interface EstimateInput {
    * number; it can only make the estimate MORE conservative, never inflate it.
    */
   pageUpliftClicks?: { low: number; mid: number; high: number };
+  /**
+   * Epic 23 — per-category multiplier learned from this site's own intervention outcomes
+   * (`impact_calibration`). Bounded 0.5..1.5 by the caller. Scales that category's uplift.
+   */
+  categoryCalibration?: Partial<Record<ScoreCategory, number>>;
 }
 
 export interface MonthPoint {
@@ -48,6 +53,41 @@ export interface TrafficEstimateResult {
   phases: PhasePoint[];
   confidenceLevel: ConfidenceLevel;
   assumptions: string[];
+}
+
+export interface Backtest {
+  projectedLow: number;
+  projectedHigh: number;
+  actual: number;
+  withinBand: boolean;
+  agoDays: number;
+}
+
+/**
+ * Epic 23 — how a previous estimate's projection for "now" compares to reality.
+ * Interpolates the previous monthly series to the elapsed time and checks the band.
+ */
+export function backtestEstimate(
+  prevSeries: MonthPoint[],
+  agoDays: number,
+  actualMonthlyClicks: number,
+): Backtest | null {
+  if (prevSeries.length === 0 || agoDays < 20) return null;
+  const monthPos = Math.max(1, agoDays / 30);
+  const i = Math.min(prevSeries.length - 1, Math.floor(monthPos) - 1);
+  const j = Math.min(prevSeries.length - 1, i + 1);
+  const frac = Math.min(1, Math.max(0, monthPos - Math.floor(monthPos)));
+  const lerp = (a: number, b: number) => Math.round(a + (b - a) * frac);
+  const low = lerp(prevSeries[i]!.low, prevSeries[j]!.low);
+  const high = lerp(prevSeries[i]!.high, prevSeries[j]!.high);
+  const actual = Math.max(0, Math.round(actualMonthlyClicks));
+  return {
+    projectedLow: low,
+    projectedHigh: high,
+    actual,
+    withinBand: actual >= low && actual <= high,
+    agoDays: Math.round(agoDays),
+  };
 }
 
 /** Pick the 30/60/90/180-day bands out of a monthly series (1 month ≈ 30 days). */
@@ -83,7 +123,18 @@ export function estimateTraffic(input: EstimateInput): TrafficEstimateResult {
   const horizonMonths = Math.max(3, Math.min(12, Math.round(input.horizonMonths ?? 6)));
   const baseline = Math.max(0, Math.round(input.baselineMonthlyVisits));
 
-  const uplift = totalUpliftFraction(input.openIssuesByCategory);
+  // Epic 23 — scale each category's open-issue count by the site's learned multiplier.
+  const cal = input.categoryCalibration;
+  const calibratedIssues = cal
+    ? (Object.fromEntries(
+        Object.entries(input.openIssuesByCategory).map(([c, n]) => [
+          c,
+          (n ?? 0) * Math.max(0.5, Math.min(1.5, cal[c as ScoreCategory] ?? 1)),
+        ]),
+      ) as typeof input.openIssuesByCategory)
+    : input.openIssuesByCategory;
+
+  const uplift = totalUpliftFraction(calibratedIssues);
   const hr = headroomFactor(input.siteScore);
 
   // Scale by headroom; keyword-model baselines are shakier, so trim the optimistic side.

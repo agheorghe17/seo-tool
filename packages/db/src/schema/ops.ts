@@ -8,6 +8,8 @@ export const jobRuns = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     type: text('type').notNull(),
     crawlId: uuid('crawl_id'),
+    /** Epic 23 — set when the job payload carries a siteId (strategy / plan pipeline). */
+    siteId: uuid('site_id'),
     status: text('status').notNull(), // running | ok | failed
     attempts: integer('attempts').notNull().default(1),
     error: text('error'),
@@ -15,7 +17,11 @@ export const jobRuns = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
   },
-  (t) => [index('job_runs_crawl_idx').on(t.crawlId), index('job_runs_type_idx').on(t.type, t.startedAt)],
+  (t) => [
+    index('job_runs_crawl_idx').on(t.crawlId),
+    index('job_runs_type_idx').on(t.type, t.startedAt),
+    index('job_runs_site_idx').on(t.siteId, t.startedAt),
+  ],
 );
 
 /** Epic 10.6 — audit log for sensitive actions. */

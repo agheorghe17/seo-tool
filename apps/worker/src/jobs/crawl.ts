@@ -32,6 +32,8 @@ function toPageRow(crawlId: string, page: PageData) {
     images: page.images,
     internalLinksCount: page.internalLinksCount,
     externalLinksCount: page.externalLinksCount,
+    internalLinks: page.internalLinks ?? [],
+    mainText: page.mainText ?? null,
   };
 }
 

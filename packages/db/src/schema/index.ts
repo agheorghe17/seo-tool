@@ -11,3 +11,4 @@ export * from './ops.js';
 export * from './strategy.js';
 export * from './content.js';
 export * from './blueprints.js';
+export * from './results.js';

@@ -48,6 +48,8 @@ export const JOB_TYPES = [
   'rank-refresh',
   'strategy-weekly',
   'page-plan',
+  'traffic-history',
+  'intervention-check',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
@@ -114,6 +116,10 @@ export interface PageData {
   images: PageImage[];
   internalLinksCount: number;
   externalLinksCount: number;
+  /** Epic 23 — same-host outbound links with their anchor text (deduped, capped). */
+  internalLinks?: { url: string; anchor: string }[];
+  /** Epic 23 — trimmed main text, for internal-link mention detection + refresh briefs. */
+  mainText?: string;
   lcpMs: number | null;
   inpMs: number | null;
   clsScore: number | null;

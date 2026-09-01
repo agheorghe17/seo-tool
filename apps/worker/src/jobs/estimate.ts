@@ -3,6 +3,7 @@ import { and, avg, count, desc, eq, inArray } from 'drizzle-orm';
 import {
   crawls,
   db,
+  impactCalibration,
   issues,
   keywordData,
   pageBlueprints,
@@ -13,7 +14,7 @@ import {
   users,
 } from 'db';
 import { gsc } from 'connectors';
-import { estimateTraffic } from 'estimator';
+import { backtestEstimate, estimateTraffic } from 'estimator';
 import { decryptSecret, estimatedClicks, type ScoreCategory } from 'shared';
 import { logger } from '../logger.js';
 import { sendCrawlDoneEmail } from '../lib/email.js';
@@ -115,6 +116,15 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
   }
   if (acc.high > 0) pageUpliftClicks = acc;
 
+  // Epic 23 — per-category calibration learned from this site's intervention outcomes.
+  const calibRows = await db
+    .select()
+    .from(impactCalibration)
+    .where(eq(impactCalibration.siteId, siteId));
+  const categoryCalibration = Object.fromEntries(
+    calibRows.filter((r) => r.sampleN >= 5).map((r) => [r.category, r.observedMultiplier]),
+  ) as Partial<Record<ScoreCategory, number>>;
+
   const estimate = estimateTraffic({
     baselineMonthlyVisits: baseline,
     baselineSource,
@@ -123,7 +133,24 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     horizonMonths: HORIZON,
     gscConnected: Boolean(site.gscConnected),
     pageUpliftClicks,
+    categoryCalibration: Object.keys(categoryCalibration).length ? categoryCalibration : undefined,
   });
+
+  // Epic 23 — backtest the PREVIOUS estimate against reality (current GSC baseline).
+  const [prevEst] = await db
+    .select()
+    .from(trafficEstimates)
+    .where(eq(trafficEstimates.siteId, siteId))
+    .orderBy(desc(trafficEstimates.generatedAt))
+    .limit(1);
+  const backtest =
+    prevEst && baselineSource === 'gsc'
+      ? backtestEstimate(
+          prevEst.series,
+          (Date.now() - new Date(prevEst.generatedAt).getTime()) / 86_400_000,
+          baseline,
+        )
+      : null;
 
   // Whether this crawl was already estimated before (page-plan re-runs `estimate` to fold in
   // the bottom-up projection — we must not re-send the "crawl done" email on that pass).
@@ -146,6 +173,7 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     assumptions: estimate.assumptions,
     series: estimate.series,
     phases: estimate.phases,
+    backtest,
     confidenceLevel: estimate.confidenceLevel,
   });
 

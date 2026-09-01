@@ -40,6 +40,14 @@ export const trafficEstimates = pgTable(
     series: jsonb('series_json').$type<EstimateMonthPoint[]>().notNull().default([]),
     /** Epic 22 — 30/60/90/180-day bands derived from `series`. Additive; still an interval. */
     phases: jsonb('phases_json').$type<EstimatePhasePoint[]>().notNull().default([]),
+    /** Epic 23 — how the PREVIOUS estimate's projection for "now" compared to reality. */
+    backtest: jsonb('backtest_json').$type<{
+      projectedLow: number;
+      projectedHigh: number;
+      actual: number;
+      withinBand: boolean;
+      agoDays: number;
+    } | null>(),
     confidenceLevel: confidenceLevelEnum('confidence_level').notNull(),
   },
   (t) => [index('traffic_estimates_site_idx').on(t.siteId, t.generatedAt)],
