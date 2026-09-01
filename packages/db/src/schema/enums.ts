@@ -70,3 +70,11 @@ export const contentStatusEnum = pgEnum('content_status', [
   'published',
   'discarded',
 ]);
+
+// --- Page blueprints (Epic 22) ---
+export const blueprintStatusEnum = pgEnum('blueprint_status', [
+  'draft',
+  'approved',
+  'applied',
+  'dismissed',
+]);

@@ -57,6 +57,36 @@ describe('estimateTraffic — always an interval', () => {
     const e = estimateTraffic({ ...baseInput, openIssuesByCategory: {} });
     expect(e.estimateMid).toBe(baseInput.baselineMonthlyVisits);
   });
+
+  it('exposes 30/60/90/180-day phase bands that never break the 2x MoM rule', () => {
+    const e = estimateTraffic(baseInput);
+    expect(e.phases.map((p) => p.days)).toEqual([30, 60, 90, 180]);
+    for (const p of e.phases) {
+      expect(p.low).toBeLessThanOrEqual(p.mid);
+      expect(p.mid).toBeLessThanOrEqual(p.high);
+    }
+    // monotonic non-decreasing across phases
+    for (let i = 1; i < e.phases.length; i++) {
+      expect(e.phases[i]!.mid).toBeGreaterThanOrEqual(e.phases[i - 1]!.mid);
+    }
+  });
+
+  it('bottom-up pageUpliftClicks can only tighten the estimate, never inflate it', () => {
+    const withoutBu = estimateTraffic(baseInput);
+    const withBu = estimateTraffic({
+      ...baseInput,
+      pageUpliftClicks: { low: 10, mid: 30, high: 60 },
+    });
+    expect(withBu.estimateHigh).toBeLessThanOrEqual(withoutBu.estimateHigh);
+    expect(withBu.estimateLow).toBeLessThanOrEqual(withBu.estimateMid);
+    expect(withBu.estimateMid).toBeLessThanOrEqual(withBu.estimateHigh);
+  });
+
+  it('ignores a zero/empty bottom-up signal (qualitative — no volume data)', () => {
+    const a = estimateTraffic(baseInput);
+    const b = estimateTraffic({ ...baseInput, pageUpliftClicks: { low: 0, mid: 0, high: 0 } });
+    expect(b.estimateHigh).toBe(a.estimateHigh);
+  });
 });
 
 describe('assertNoUnrealisticGrowth', () => {

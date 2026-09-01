@@ -12,10 +12,23 @@ export interface EstimateInput {
   /** 3-12; clamped. */
   horizonMonths?: number;
   gscConnected: boolean;
+  /**
+   * Epic 22 — bottom-up extra monthly clicks from per-page blueprint potentials, as an
+   * interval. When provided (and > 0) it pulls the projection toward a data-grounded
+   * number; it can only make the estimate MORE conservative, never inflate it.
+   */
+  pageUpliftClicks?: { low: number; mid: number; high: number };
 }
 
 export interface MonthPoint {
   month: number;
+  low: number;
+  mid: number;
+  high: number;
+}
+
+export interface PhasePoint {
+  days: number; // 30 | 60 | 90 | 180
   low: number;
   mid: number;
   high: number;
@@ -31,8 +44,21 @@ export interface TrafficEstimateResult {
   estimateHigh: number;
   /** Monthly band for charting (Epic 8.7). */
   series: MonthPoint[];
+  /** Epic 22 — 30/60/90/180-day bands derived from `series`. Still an interval. */
+  phases: PhasePoint[];
   confidenceLevel: ConfidenceLevel;
   assumptions: string[];
+}
+
+/** Pick the 30/60/90/180-day bands out of a monthly series (1 month ≈ 30 days). */
+export function phasesFromSeries(series: MonthPoint[]): PhasePoint[] {
+  const at = (monthIdx: number): MonthPoint | undefined => series[monthIdx] ?? series[series.length - 1];
+  return [30, 60, 90, 180]
+    .map((days) => {
+      const p = at(days / 30 - 1);
+      return p ? { days, low: p.low, mid: p.mid, high: p.high } : null;
+    })
+    .filter((p): p is PhasePoint => p !== null);
 }
 
 const BASE_ASSUMPTIONS = [
@@ -72,6 +98,20 @@ export function estimateTraffic(input: EstimateInput): TrafficEstimateResult {
   fracMid = Math.min(fracMid, fracHigh);
   fracLow = Math.min(fracLow, fracMid);
 
+  // Epic 22 — blend in bottom-up per-page potential. It can only tighten the estimate.
+  const bu = input.pageUpliftClicks;
+  if (bu && baseline > 0 && (bu.low > 0 || bu.mid > 0 || bu.high > 0)) {
+    const f = (c: number) => Math.max(0, c) / baseline;
+    const buLow = f(bu.low);
+    const buMid = f(bu.mid);
+    const buHigh = f(bu.high);
+    // High: don't exceed the top-down cap, but let the data-grounded number pull it down
+    // toward mid (never below the top-down mid).
+    fracHigh = Math.min(fracHigh, Math.max(buHigh, fracMid));
+    fracMid = Math.min(fracHigh, (fracMid + buMid) / 2);
+    fracLow = Math.min(fracMid, Math.max(0, (fracLow + buLow) / 2));
+  }
+
   const series: MonthPoint[] = [];
   for (let m = 1; m <= horizonMonths; m++) {
     const r = rampFraction(m, horizonMonths);
@@ -98,6 +138,7 @@ export function estimateTraffic(input: EstimateInput): TrafficEstimateResult {
     estimateMid: last.mid,
     estimateHigh: last.high,
     series,
+    phases: phasesFromSeries(series),
     confidenceLevel,
     assumptions: [
       input.baselineSource === 'gsc'

@@ -11,6 +11,10 @@ export interface BusinessProfile {
   locations: string[];
   languages: string[];
   audience: string | null;
+  geoCountry: string | null;
+  geoLanguage: string | null;
+  primaryCity: string | null;
+  localEmphasis: boolean;
   confirmedAt: string | null;
 }
 

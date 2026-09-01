@@ -3,6 +3,13 @@ import { baselineSourceEnum, confidenceLevelEnum } from './enums.js';
 import { crawls } from './crawls.js';
 import { sites } from './sites.js';
 
+export interface EstimatePhasePoint {
+  days: number; // 30 | 60 | 90 | 180
+  low: number;
+  mid: number;
+  high: number;
+}
+
 export interface EstimateMonthPoint {
   month: number;
   low: number;
@@ -31,6 +38,8 @@ export const trafficEstimates = pgTable(
     horizonMonths: integer('horizon_months').notNull(),
     assumptions: jsonb('assumptions_json').$type<string[]>().notNull().default([]),
     series: jsonb('series_json').$type<EstimateMonthPoint[]>().notNull().default([]),
+    /** Epic 22 — 30/60/90/180-day bands derived from `series`. Additive; still an interval. */
+    phases: jsonb('phases_json').$type<EstimatePhasePoint[]>().notNull().default([]),
     confidenceLevel: confidenceLevelEnum('confidence_level').notNull(),
   },
   (t) => [index('traffic_estimates_site_idx').on(t.siteId, t.generatedAt)],

@@ -6,6 +6,8 @@ import { cannibalization, strikingDistance } from './striking.js';
 import { guessTargetKeyword } from './target-keyword.js';
 import { pageContentGap } from './gap.js';
 import { prioritiseOpportunities, scoreOpportunity } from './opportunity.js';
+import { assignPageTargets, type KeywordCandidate } from './page-target.js';
+import type { PageLike } from './types.js';
 
 describe('classifyIntent', () => {
   it('maps common Romanian modifiers', () => {
@@ -137,5 +139,69 @@ describe('opportunity', () => {
     const r = scoreOpportunity({ keyword: 'x', searchVolume: 500, businessRelevance: 60 });
     const text = JSON.stringify(r).toLowerCase();
     expect(text).not.toMatch(/locul 1|pozitia 1 garantat|garantat/);
+  });
+});
+
+describe('assignPageTargets', () => {
+  const page = (url: string, title: string, wordCount = 500): PageLike => ({
+    url,
+    title,
+    h1: title,
+    headings: [],
+    wordCount,
+    schemaTypes: [],
+  });
+  const kw = (id: string, keyword: string, extra: Partial<KeywordCandidate> = {}): KeywordCandidate => ({
+    id,
+    keyword,
+    businessRelevance: 70,
+    opportunityScore: 50,
+    searchVolume: 300,
+    ...extra,
+  });
+
+  it('gives the homepage the head term and matches service pages to their keyword', () => {
+    const pages = [
+      page('https://x.ro/', 'x.ro — agentie de marketing'),
+      page('https://x.ro/google-ads', 'Servicii Google Ads'),
+      page('https://x.ro/facebook-ads', 'Servicii Facebook Ads'),
+    ];
+    const kws = [
+      kw('k1', 'agentie de marketing', { businessRelevance: 90, searchVolume: 900 }),
+      kw('k2', 'servicii google ads'),
+      kw('k3', 'servicii facebook ads'),
+    ];
+    const res = assignPageTargets(pages, kws);
+    const home = res.find((r) => r.isHomepage)!;
+    expect(home.targetKeywordId).toBe('k1');
+    expect(res.find((r) => r.url.endsWith('/google-ads'))!.targetKeywordId).toBe('k2');
+    expect(res.find((r) => r.url.endsWith('/facebook-ads'))!.targetKeywordId).toBe('k3');
+  });
+
+  it('flags cannibalisation when two pages target near-identical keywords', () => {
+    const pages = [
+      page('https://x.ro/ppc', 'Servicii PPC Google Ads'),
+      page('https://x.ro/google-ads', 'Servicii Google Ads PPC'),
+    ];
+    const kws = [kw('k1', 'servicii google ads ppc'), kw('k2', 'servicii ppc google ads')];
+    const res = assignPageTargets(pages, kws);
+    expect(res.some((r) => r.diagnosis === 'cannibalization')).toBe(true);
+  });
+
+  it('flags an orphan page with content but no matching keyword', () => {
+    const pages = [page('https://x.ro/random-legacy-thing', 'Complet fara legatura', 400)];
+    const kws = [kw('k1', 'servicii google ads')];
+    const res = assignPageTargets(pages, kws);
+    expect(res[0]!.diagnosis).toBe('orphan_page');
+  });
+
+  it('prefers the local head term for the homepage when localEmphasis + primaryCity', () => {
+    const pages = [page('https://x.ro/', 'x.ro')];
+    const kws = [
+      kw('k1', 'agentie de marketing', { businessRelevance: 90, searchVolume: 1000 }),
+      kw('k2', 'agentie de marketing cluj', { businessRelevance: 88, searchVolume: 200 }),
+    ];
+    const res = assignPageTargets(pages, kws, { primaryCity: 'Cluj', localEmphasis: true });
+    expect(res[0]!.targetKeywordId).toBe('k2');
   });
 });

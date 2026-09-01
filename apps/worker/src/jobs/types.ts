@@ -60,6 +60,7 @@ export interface JobPayloads {
   'strategy-build': StrategyBuildJob;
   'rank-refresh': SiteJob;
   'strategy-weekly': Record<string, never>;
+  'page-plan': SiteJob;
 }
 
 export type { JobType };

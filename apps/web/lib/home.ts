@@ -80,6 +80,8 @@ export interface HomeData {
     confidence: 'low' | 'medium' | 'high';
     baselineSource: 'gsc' | 'keyword_model';
     assumptions: string[];
+    baselineMonthlyVisits: number;
+    phases: { days: number; low: number; mid: number; high: number }[];
   } | null;
   signals: Signal[];
   strategyReady: boolean;

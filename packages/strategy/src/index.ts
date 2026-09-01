@@ -7,3 +7,4 @@ export * from './striking.js';
 export * from './target-keyword.js';
 export * from './gap.js';
 export * from './opportunity.js';
+export * from './page-target.js';

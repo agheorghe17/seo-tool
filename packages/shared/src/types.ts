@@ -47,6 +47,7 @@ export const JOB_TYPES = [
   'strategy-build',
   'rank-refresh',
   'strategy-weekly',
+  'page-plan',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

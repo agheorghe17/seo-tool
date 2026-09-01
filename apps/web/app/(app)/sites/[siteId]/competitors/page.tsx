@@ -38,6 +38,12 @@ export default function CompetitorsPage() {
             Cuvinte cheie
           </Link>
           <span className="font-medium text-[var(--text)]">Competitori</span>
+          <Link
+            href={`/sites/${siteId}/pages-plan`}
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
+          >
+            Pagini
+          </Link>
         </div>
       </div>
 

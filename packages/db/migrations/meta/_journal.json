@@ -36,6 +36,13 @@
       "when": 1788252832692,
       "tag": "0004_cultured_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788257379186,
+      "tag": "0005_clumsy_pyro",
+      "breakpoints": true
     }
   ]
 }

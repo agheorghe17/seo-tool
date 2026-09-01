@@ -364,3 +364,38 @@ generare de conținut prin copy-paste în Claude-ul utilizatorului (zero cost AP
   aprobare Google); notă + link în Setări; SEO local acoperit acum prin regula `onpage.localbusiness-schema`
 - **Gata când:** type-check 12/12, lint curat, `web build` OK (17 rute), 114 teste; `/home` cu
   `aiVisibility`+`signals` și fluxul de conținut (start→save→discard) verificate pe salesup.ro.
+
+## Epic 22 — Blueprint de pagină + proiecție 30/60/90 (config per-site, reutilizabil)
+
+Spune exact ce cuvânt țintește fiecare pagină și cum s-o refaci; proiecție de trafic pe faze.
+Totul config-driven din `business_profiles` (piață/geo/oraș) — nimic hardcodat pe nișă.
+
+- [x] **22.1** Config de piață per-site — `business_profiles` +`geo_country`/`geo_language`/`primary_city`/
+  `local_emphasis` (migrație `0005`). `strategy-shared.ts` `glFor(profile)`/`hlFor(profile)`, env doar fallback.
+  UI în `ProfileCard` (Setări): țară / limbă / oraș principal / comutator „accent local".
+- [x] **22.2** `packages/strategy/src/page-target.ts` — `assignPageTargets(pages, keywords, {primaryCity,
+  localEmphasis, homepageUrl})` pur: fiecare pagină primește cel mai bun cuvânt (fit × oportunitate ×
+  relevanță), homepage-ul primește head term-ul (varianta locală dacă e cazul), diagnostic
+  `ok|cannibalization|orphan_page|no_target`. 4 teste noi.
+- [x] **22.3** Tabel `page_blueprints` (migrație `0005`) + job `page-plan` (`apps/worker/src/jobs/page-plan.ts`,
+  în `JOB_TYPES`): sinteză deterministă — `current` vs `recommended` (title/H1/meta din șabloane
+  parametrizate de profil, `h2Outline` din `pageContentGap` + brief, `schemaType` LocalBusiness/
+  Organization/Article, linkuri interne din cluster), `potential` (CTR interval din `shared/ctr.ts`;
+  `qualitative` fără volum). Rulează după `strategy-build`; re-enqueue `estimate`.
+- [x] **22.4** `packages/estimator` — `EstimateInput.pageUpliftClicks` (bottom-up, doar restrânge estimarea,
+  nu o umflă) + `phases[]` 30/60/90/180 (`phasesFromSeries`), `traffic_estimates.phases jsonb`.
+  Jobul `estimate` însumează `page_blueprints.potential` și trece `pageUpliftClicks`; email „crawl done"
+  doar la prima estimare per crawl. 4 teste noi (toate garanțiile ≤2× MoM rămân).
+- [x] **22.5** API `apps/api/src/routes/plan.ts` — `GET /plan` (blueprints + market + projection),
+  `POST /plan/rebuild`, `GET /blueprints/:id`, `POST /blueprints/:id/apply` (title+meta pe WP prin
+  `wordpress.applyFix`, cu `previous` pentru rollback), `POST /blueprints/:id/prompt` (prompt de
+  rescriere), `POST /blueprints/:id/dismiss`, `POST /blueprints/:id/rollback`. Profil PUT devine
+  merge parțial (nu mai șterge câmpuri netrimise).
+- [x] **22.6** UI — sub-secțiune „Pagini" în tab-ul Analiză (`pages-plan/page.tsx`): listă de
+  blueprint-uri (homepage primul, badge de diagnostic), detaliu Acum vs. Recomandat + Potențial +
+  butoane „Aprobă title+meta" / „Copiază prompt" / „Renunță". Card „Proiecție 30/60/90" pe Autopilot
+  (benzi low–high + ipoteze, guard pentru date insuficiente).
+- **Gata când:** type-check 12/12, lint curat, `web build` OK (18 rute), 121 teste; `page-plan` rulat
+  pe salesup.ro → 14 blueprint-uri (homepage țintă „agentie google ads bucuresti" + schema LocalBusiness,
+  5 canibalizări detectate), `/plan` întoarce `phases` + `market`. Test de reutilizare: profil nou pe
+  alt domeniu/altă piață → zero referințe hardcodate la nișă în cod (doar din profil).

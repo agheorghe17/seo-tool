@@ -35,6 +35,11 @@ export const businessProfiles = pgTable('business_profiles', {
   languages: jsonb('languages').$type<string[]>().notNull().default(['ro']),
   audience: text('audience'),
   offerNotes: text('offer_notes'),
+  // Epic 22 — per-site target market. env STRATEGY_GEO/STRATEGY_LANG are only fallbacks now.
+  geoCountry: text('geo_country'),
+  geoLanguage: text('geo_language'),
+  primaryCity: text('primary_city'),
+  localEmphasis: boolean('local_emphasis').notNull().default(false),
   sourceCrawlId: uuid('source_crawl_id').references(() => crawls.id, { onDelete: 'set null' }),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

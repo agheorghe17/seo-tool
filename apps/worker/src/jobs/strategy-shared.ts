@@ -54,5 +54,14 @@ export async function siteRow(siteId: string) {
 
 const STRATEGY_GEO = process.env.STRATEGY_GEO ?? 'ro';
 const STRATEGY_LANG = process.env.STRATEGY_LANG ?? 'ro';
+/** @deprecated use glFor(profile) — kept for callers that have no profile. */
 export const GL = STRATEGY_GEO;
 export const HL = STRATEGY_LANG;
+
+/** Epic 22 — per-site geo/lang from the business profile, env only as fallback. */
+export function glFor(profile?: { geoCountry?: string | null } | null): string {
+  return profile?.geoCountry?.trim().toLowerCase() || STRATEGY_GEO;
+}
+export function hlFor(profile?: { geoLanguage?: string | null } | null): string {
+  return profile?.geoLanguage?.trim().toLowerCase() || STRATEGY_LANG;
+}

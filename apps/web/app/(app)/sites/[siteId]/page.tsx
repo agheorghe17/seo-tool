@@ -248,6 +248,14 @@ export default function AutopilotPage() {
         )}
       </div>
 
+      {/* 30/60/90 traffic projection */}
+      <div>
+        <SectionTitle hint={<Link href={`/sites/${siteId}/pages-plan`}>vezi planul pe pagini →</Link>}>
+          Proiecție de trafic dacă aplici planul
+        </SectionTitle>
+        <Projection traffic={home.traffic} />
+      </div>
+
       {/* Connection nudges */}
       {(!home.site.gscConnected || !home.site.wpConnected) && (
         <Card>
@@ -310,5 +318,82 @@ function QueueActions({ siteId, task }: { siteId: string; task: HomeTask }) {
         Deschide în Aprobări →
       </Button>
     </Link>
+  );
+}
+
+function Projection({ traffic }: { traffic: import('@/lib/home').HomeData['traffic'] }) {
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const flat =
+    !traffic ||
+    traffic.phases.length === 0 ||
+    traffic.baselineMonthlyVisits < 10 ||
+    traffic.phases[traffic.phases.length - 1]!.high - traffic.phases[0]!.low < 3;
+  if (flat) {
+    return (
+      <Card>
+        <p className="text-sm text-[var(--text-muted)]">
+          {traffic && traffic.baselineSource === 'gsc'
+            ? `Search Console arată foarte puțin trafic organic acum (~${traffic.baselineMonthlyVisits}/lună), deci o proiecție ar fi doar zgomot. Aplică blueprint-urile pe pagini și revino peste 3–4 săptămâni.`
+            : 'Proiecția devine utilă după ce conectezi Google Search Console (Setări) și aplici din blueprint-uri.'}
+        </p>
+      </Card>
+    );
+  }
+  const fmt = (n: number) => n.toLocaleString('ro-RO');
+  const label: Record<number, string> = {
+    30: 'La 30 de zile',
+    60: 'La 60 de zile',
+    90: 'La 90 de zile',
+    180: 'La 6 luni',
+  };
+  const max = Math.max(...traffic.phases.map((p) => p.high));
+  return (
+    <Card>
+      <div className="mb-2 flex items-baseline justify-between text-xs text-[var(--text-muted)]">
+        <span>Acum: ~{fmt(traffic.baselineMonthlyVisits)} vizite/lună</span>
+        <span>
+          Încredere:{' '}
+          {traffic.confidence === 'high'
+            ? 'mare'
+            : traffic.confidence === 'medium'
+              ? 'medie'
+              : 'scăzută'}{' '}
+          · interval, nu o promisiune
+        </span>
+      </div>
+      <div className="space-y-2">
+        {traffic.phases.map((p) => (
+          <div key={p.days} className="flex items-center gap-3 text-sm">
+            <span className="w-28 shrink-0 text-[var(--text-muted)]">{label[p.days] ?? `${p.days} zile`}</span>
+            <div className="relative h-6 flex-1 rounded bg-[var(--surface-2)]">
+              <div
+                className="absolute inset-y-0 rounded bg-[var(--accent)]/25"
+                style={{ left: `${(p.low / max) * 100}%`, width: `${((p.high - p.low) / max) * 100}%` }}
+              />
+              <div
+                className="absolute inset-y-0 w-0.5 bg-[var(--accent)]"
+                style={{ left: `${(p.mid / max) * 100}%` }}
+              />
+            </div>
+            <span className="w-32 shrink-0 text-right tabular-nums">
+              {fmt(p.low)}–{fmt(p.high)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowAssumptions((v) => !v)}
+        className="mt-3 text-xs text-[var(--text-muted)] underline"
+      >
+        {showAssumptions ? 'ascunde ipotezele' : 'pe ce se bazează?'}
+      </button>
+      {showAssumptions && (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--text-muted)]">
+          {traffic.assumptions.map((a, i) => (
+            <li key={i}>{a}</li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

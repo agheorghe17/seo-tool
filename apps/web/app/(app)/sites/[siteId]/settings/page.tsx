@@ -205,10 +205,18 @@ function ProfileCard({ siteId }: { siteId: string }) {
   const [services, setServices] = useState<string | null>(null);
   const [locations, setLocations] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [country, setCountry] = useState<string | null>(null);
+  const [language, setLanguage] = useState<string | null>(null);
+  const [city, setCity] = useState<string | null>(null);
+  const [local, setLocal] = useState<boolean | null>(null);
 
   const servicesVal = services ?? (profile?.services ?? []).join('\n');
   const locationsVal = locations ?? (profile?.locations ?? []).join(', ');
   const summaryVal = summary ?? profile?.summary ?? '';
+  const countryVal = country ?? profile?.geoCountry ?? 'RO';
+  const languageVal = language ?? profile?.geoLanguage ?? 'ro';
+  const cityVal = city ?? profile?.primaryCity ?? '';
+  const localVal = local ?? profile?.localEmphasis ?? false;
 
   return (
     <Card>
@@ -243,6 +251,34 @@ function ProfileCard({ siteId }: { siteId: string }) {
             className={`mt-1 ${inputCls}`}
           />
         </label>
+
+        <div className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+            Piață țintă
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="text-[var(--text-muted)]">Țară (cod)</span>
+              <input value={countryVal} onChange={(e) => setCountry(e.target.value)} className={`mt-1 ${inputCls}`} />
+            </label>
+            <label className="block">
+              <span className="text-[var(--text-muted)]">Limbă (cod)</span>
+              <input value={languageVal} onChange={(e) => setLanguage(e.target.value)} className={`mt-1 ${inputCls}`} />
+            </label>
+            <label className="block">
+              <span className="text-[var(--text-muted)]">Oraș principal (opțional)</span>
+              <input value={cityVal} onChange={(e) => setCity(e.target.value)} placeholder="ex. București" className={`mt-1 ${inputCls}`} />
+            </label>
+          </div>
+          <label className="mt-3 flex items-center gap-2">
+            <input type="checkbox" checked={localVal} onChange={(e) => setLocal(e.target.checked)} />
+            <span className="text-[var(--text-muted)]">
+              Accent local — homepage-ul și paginile de servicii țintesc și varianta „… {cityVal || 'oraș'}”
+              și primesc schema LocalBusiness.
+            </span>
+          </label>
+        </div>
+
         <Button
           disabled={save.isPending}
           onClick={() =>
@@ -250,6 +286,10 @@ function ProfileCard({ siteId }: { siteId: string }) {
               summary: summaryVal,
               services: servicesVal.split('\n').map((s) => s.trim()).filter(Boolean),
               locations: locationsVal.split(',').map((s) => s.trim()).filter(Boolean),
+              geoCountry: countryVal.trim() || undefined,
+              geoLanguage: languageVal.trim() || undefined,
+              primaryCity: cityVal.trim() || null,
+              localEmphasis: localVal,
               confirmed: true,
             })
           }

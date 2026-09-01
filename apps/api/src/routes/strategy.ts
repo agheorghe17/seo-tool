@@ -42,6 +42,11 @@ const profileBody = z.object({
   locations: z.array(z.string().max(80)).max(30).optional(),
   languages: z.array(z.string().max(10)).max(10).optional(),
   audience: z.string().max(500).optional(),
+  // Epic 22 — per-site target market.
+  geoCountry: z.string().max(8).optional(),
+  geoLanguage: z.string().max(8).optional(),
+  primaryCity: z.string().max(80).nullable().optional(),
+  localEmphasis: z.boolean().optional(),
   confirmed: z.boolean().optional(),
 });
 
@@ -65,14 +70,24 @@ export async function strategyRoutes(app: FastifyInstance): Promise<void> {
     const parsed = profileBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const b = parsed.data;
+    const [prev] = await db
+      .select()
+      .from(businessProfiles)
+      .where(eq(businessProfiles.siteId, site.id));
+    // Only overwrite fields that were actually sent — partial updates (e.g. just the
+    // target-market config from Settings) must not wipe the rest.
     const values = {
       siteId: site.id,
-      summary: b.summary ?? null,
-      services: b.services ?? [],
-      locations: b.locations ?? [],
-      languages: b.languages?.length ? b.languages : ['ro'],
-      audience: b.audience ?? null,
-      confirmedAt: b.confirmed ? new Date() : null,
+      summary: b.summary ?? prev?.summary ?? null,
+      services: b.services ?? (prev?.services as string[] | undefined) ?? [],
+      locations: b.locations ?? (prev?.locations as string[] | undefined) ?? [],
+      languages: b.languages?.length ? b.languages : (prev?.languages as string[] | undefined) ?? ['ro'],
+      audience: b.audience ?? prev?.audience ?? null,
+      geoCountry: b.geoCountry ?? prev?.geoCountry ?? null,
+      geoLanguage: b.geoLanguage ?? prev?.geoLanguage ?? null,
+      primaryCity: b.primaryCity !== undefined ? b.primaryCity : prev?.primaryCity ?? null,
+      localEmphasis: b.localEmphasis ?? prev?.localEmphasis ?? false,
+      confirmedAt: b.confirmed ? new Date() : prev?.confirmedAt ?? null,
       updatedAt: new Date(),
     };
     const [row] = await db

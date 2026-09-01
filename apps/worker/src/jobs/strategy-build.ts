@@ -19,6 +19,7 @@ import {
   type PageLike,
 } from 'strategy';
 import { logger } from '../logger.js';
+import { sendNext } from '../queue.js';
 import { latestCompletedCrawlId, ownPageLikes } from './strategy-shared.js';
 import type { StrategyBuildJob } from './types.js';
 
@@ -39,7 +40,10 @@ const ROADMAP_SYSTEM = [
   'REGULI: fara promisiuni de pozitie/trafic. 4-6 actiuni per faza. `why` = de ce conteaza, pe intelesul oricui.',
 ].join('\n');
 
-export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Promise<void> {
+export async function handleStrategyBuild(
+  job: PgBoss.Job<StrategyBuildJob>,
+  boss: PgBoss,
+): Promise<void> {
   const { siteId, full } = job.data;
 
   const kws = await db.select().from(keywordData).where(eq(keywordData.siteId, siteId));
@@ -84,6 +88,7 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
   // SERP tracking (Epic 19) picks up quick_win + build_content keywords directly — see serp-fetch.
   if (!full) {
     logger.info({ siteId, keywords: kws.length }, 'strategy-build (rescore) done');
+    await sendNext(boss, 'page-plan', { siteId });
     return;
   }
 
@@ -219,6 +224,7 @@ export async function handleStrategyBuild(job: PgBoss.Job<StrategyBuildJob>): Pr
     { siteId, keywords: kws.length, playbooks: top.length, roadmap: roadmap.items?.length ?? 0 },
     'strategy-build (full) done',
   );
+  await sendNext(boss, 'page-plan', { siteId });
 }
 
 function buildChecklist(

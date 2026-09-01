@@ -77,6 +77,12 @@ export default function KeywordsPage() {
           >
             Competitori
           </Link>
+          <Link
+            href={`/sites/${siteId}/pages-plan`}
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
+          >
+            Pagini
+          </Link>
         </div>
       </div>
 

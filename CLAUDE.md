@@ -112,7 +112,18 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Epics 0-21 implementate — audit (0-12) + Strategie (13-19) + redesign UX (20) + „Autopilot" (21).
+Epics 0-22 implementate — audit (0-12) + Strategie (13-19) + UX (20) + „Autopilot" (21) + „Blueprint de pagină" (22).
+
+**Blueprint de pagină (Epic 22):** `page-plan` job (`apps/worker/src/jobs/page-plan.ts`) → tabel
+`page_blueprints`: pentru fiecare pagină, cuvântul țintă (`strategy/page-target.ts` `assignPageTargets`,
+pur, niche-agnostic) + `current` vs `recommended` (title/H1/meta/H2/schema/linkuri) + `potential`
+(interval CTR). Config de piață per-site pe `business_profiles` (`geo_country`/`geo_language`/
+`primary_city`/`local_emphasis`) — env `STRATEGY_GEO`/`STRATEGY_LANG` = doar fallback (`glFor`/`hlFor`
+în `strategy-shared.ts`). Proiecție 30/60/90/180 în `estimator` (`estimatePhased` via `phases[]` +
+`pageUpliftClicks` bottom-up, care doar restrânge; `traffic_estimates.phases`). API
+`apps/api/src/routes/plan.ts` (`GET /plan`, `apply` title+meta pe WP cu rollback, `prompt` de
+rescriere). UI: sub-secțiune „Pagini" în tab-ul Analiză (`pages-plan/`) + card „Proiecție 30/60/90"
+pe Autopilot.
 
 **UI (Epic 21):** model de agent, tab-uri per site sub `apps/web/app/(app)/sites/[siteId]/`
 (`layout.tsx`): **Autopilot** (`page.tsx` — casetă de comandă, 2 gauge Sănătate + Vizibilitate AI,

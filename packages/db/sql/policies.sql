@@ -100,6 +100,7 @@ alter table serp_results      enable row level security;
 alter table keyword_playbooks enable row level security;
 alter table roadmap_items     enable row level security;
 alter table content_drafts    enable row level security;
+alter table page_blueprints   enable row level security;
 
 drop policy if exists business_profiles_owner on business_profiles;
 create policy business_profiles_owner on business_profiles for select using (
@@ -150,6 +151,11 @@ create policy roadmap_items_owner on roadmap_items for select using (
 drop policy if exists content_drafts_owner on content_drafts;
 create policy content_drafts_owner on content_drafts for select using (
   exists (select 1 from sites s where s.id = content_drafts.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists page_blueprints_owner on page_blueprints;
+create policy page_blueprints_owner on page_blueprints for select using (
+  exists (select 1 from sites s where s.id = page_blueprints.site_id and s.user_id = auth.uid())
 );
 
 -- Realtime: the dashboard subscribes to crawl-row updates for live progress.

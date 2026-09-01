@@ -5,6 +5,7 @@ import {
   db,
   issues,
   keywordData,
+  pageBlueprints,
   pages,
   siteSecrets,
   sites,
@@ -97,6 +98,23 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     baseline = await keywordBaseline(siteId);
   }
 
+  // Epic 22 — bottom-up: sum the per-page blueprint potentials (extra monthly clicks).
+  const bpRows = await db
+    .select({ potential: pageBlueprints.potential })
+    .from(pageBlueprints)
+    .where(eq(pageBlueprints.siteId, siteId));
+  let pageUpliftClicks: { low: number; mid: number; high: number } | undefined;
+  const acc = { low: 0, mid: 0, high: 0 };
+  for (const r of bpRows) {
+    const p = r.potential;
+    if (!p || p.qualitative) continue;
+    const cur = p.currentClicks ?? 0;
+    acc.low += Math.max(0, p.clicksLow - cur);
+    acc.mid += Math.max(0, p.clicksMid - cur);
+    acc.high += Math.max(0, p.clicksHigh - cur);
+  }
+  if (acc.high > 0) pageUpliftClicks = acc;
+
   const estimate = estimateTraffic({
     baselineMonthlyVisits: baseline,
     baselineSource,
@@ -104,7 +122,17 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     siteScore,
     horizonMonths: HORIZON,
     gscConnected: Boolean(site.gscConnected),
+    pageUpliftClicks,
   });
+
+  // Whether this crawl was already estimated before (page-plan re-runs `estimate` to fold in
+  // the bottom-up projection — we must not re-send the "crawl done" email on that pass).
+  const [prior] = await db
+    .select({ id: trafficEstimates.id })
+    .from(trafficEstimates)
+    .where(eq(trafficEstimates.crawlId, crawlId))
+    .limit(1);
+  const isFirstEstimate = !prior;
 
   await db.insert(trafficEstimates).values({
     siteId,
@@ -117,6 +145,7 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     horizonMonths: estimate.horizonMonths,
     assumptions: estimate.assumptions,
     series: estimate.series,
+    phases: estimate.phases,
     confidenceLevel: estimate.confidenceLevel,
   });
 
@@ -127,10 +156,15 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
 
   await pruneOldCrawls(siteId);
 
-  const [owner] = await db.select({ email: users.email }).from(users).where(eq(users.id, site.userId));
-  if (owner?.email) {
-    const webBase = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
-    await sendCrawlDoneEmail(owner.email, site.domain, `${webBase}/sites/${siteId}`);
+  if (isFirstEstimate) {
+    const [owner] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, site.userId));
+    if (owner?.email) {
+      const webBase = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
+      await sendCrawlDoneEmail(owner.email, site.domain, `${webBase}/sites/${siteId}`);
+    }
   }
 
   logger.info(
