@@ -55,12 +55,15 @@ export default function CrawlPage() {
         actions={
           done && (
             <div className="flex gap-2">
-              <button onClick={downloadCsv} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">
+              <button
+                onClick={downloadCsv}
+                className="rounded-[var(--radius-sm)] border border-[var(--border-strong)] px-3 py-2 text-sm hover:bg-[var(--surface-2)]"
+              >
                 Export CSV
               </button>
               <Link
                 href={`/crawls/${crawlId}/report`}
-                className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700"
+                className="rounded-[var(--radius-sm)] border border-[var(--border-strong)] px-3 py-2 text-sm hover:bg-[var(--surface-2)]"
               >
                 Raport imprimabil (PDF)
               </Link>

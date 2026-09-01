@@ -112,6 +112,17 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
+Epics 0-20 implementate — audit (0-12) + modul Strategie (13-19) + redesign UX „pilot automat" (20).
+
+**UI (Epic 20):** flux unificat per site sub `apps/web/app/(app)/sites/[siteId]/` cu layout de tab-uri
+(`layout.tsx`): **Acasă** (`page.tsx`) · **Sarcini** (`tasks/`) · **Cuvinte cheie** (`keywords/`) ·
+**Competitori** (`competitors/`) · **Setări** (`settings/`). `strategy/` redirecționează la `keywords/`.
+Două endpoint-uri noi compun ecranele: `GET /api/sites/:id/home` (scor + istoric + gamificare derivată +
+KPI + trafic + feed „ce s-a schimbat") și `GET /api/sites/:id/tasks` (listă unificată: fix-uri audit
+grupate pe `rule_id` + oportunități keyword + `roadmap_items`) — `apps/api/src/routes/home.ts`.
+Design system: token-uri CSS în `apps/web/app/globals.css`, componente în `components/ui.tsx`
+(`Gauge`, `ProgressBar`, `Stat`, `Chip`, `Sheet`, `levelFromPoints`…) + `components/TaskCard.tsx`.
+
 Epics 0-19 implementate — audit complet (0-12) + modul Strategie de keywords & competitori (13-19).
 Verificat end-to-end pe Supabase real: pipeline audit `crawl→enrich→score→recommend→estimate` și
 pipeline strategie `profile-extract→keyword-research→rank-import→competitor-crawl→strategy-build`.

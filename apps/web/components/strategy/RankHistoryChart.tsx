@@ -8,7 +8,7 @@ export function RankHistoryChart({
 }) {
   const data = points.filter((p) => p.position != null) as { capturedAt: string; position: number }[];
   if (data.length < 2) {
-    return <p className="text-sm text-neutral-500">Nu sunt suficiente date de istoric încă.</p>;
+    return <p className="text-sm text-[var(--text-muted)]">Nu sunt suficiente date de istoric încă.</p>;
   }
   const w = 560;
   const h = 180;

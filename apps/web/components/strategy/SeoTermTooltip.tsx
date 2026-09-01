@@ -42,7 +42,7 @@ export function SeoTermTooltip({ term, children }: { term: string; children?: Re
         {children ?? term}
       </button>
       {open && (
-        <span className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-neutral-200 bg-white p-2 text-xs font-normal text-neutral-600 shadow-lg dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+        <span className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs font-normal text-[var(--text-muted)] shadow-lg">
           {def}
         </span>
       )}

@@ -7,6 +7,7 @@ import { billingRoutes } from './routes/billing.js';
 import { crawlRoutes } from './routes/crawls.js';
 import { estimateRoutes } from './routes/estimates.js';
 import { healthRoutes } from './routes/health.js';
+import { homeRoutes } from './routes/home.js';
 import { meRoutes } from './routes/me.js';
 import { recommendationRoutes } from './routes/recommendations.js';
 import { siteRoutes } from './routes/sites.js';
@@ -69,6 +70,7 @@ await app.register(estimateRoutes);
 await app.register(meRoutes);
 await app.register(billingRoutes);
 await app.register(strategyRoutes);
+await app.register(homeRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

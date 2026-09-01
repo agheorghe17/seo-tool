@@ -305,3 +305,32 @@ Traseu critic: **0 → 9 → 2 → 3 → 4 → 5**. Epic 1 poate merge în paral
 - **`GOOGLE_ADS_DEVELOPER_TOKEN`** → volum de căutare pe cuvinte, prioritizare mai bună.
 - **`SERP_PROVIDER=dataforseo|serpapi|…` + cheie** → poziții live față de competitori, „cine e în top 10".
 - **`LLM_PROVIDER=anthropic|ollama`** → profil, briefuri și narativ mult mai bune (altfel: fallback determinist).
+
+## Epic 20 — Redesign UX „pilot automat" (flux unificat + gamificare)
+
+Un singur flux per site, inspirat de platformele „SEO fără să știi SEO" (Morningscore, Diib):
+scor de sănătate + nivel/XP/streak, listă unică de sarcini în limbaj simplu (audit + cuvinte cheie
++ plan), navigație de 5 tab-uri.
+
+- [x] **20.1** Design system — token-uri CSS (`globals.css`), `ui.tsx` extins: `Gauge`, `ProgressBar`,
+  `Stat`, `Chip`, `Dots`, `Sheet`, `SectionTitle`, `CategoryTag`, `levelFromPoints`
+- [x] **20.2** Shell — `Nav` (top bar „SEO Autopilot"), layout per-site `sites/[siteId]/layout.tsx`
+  cu tab-uri: Acasă · Sarcini · Cuvinte cheie · Competitori · Setări
+- [x] **20.3** API `GET /api/sites/:id/home` — scor + istoric + delta, categorii, gamificare
+  (puncte = fix-uri aplicate + plan bifat; nivel + streak săptămânal derivate), KPI cuvinte,
+  bandă de trafic, feed „ce s-a schimbat" (din `rank_snapshots`), „focus" + „next"
+- [x] **20.4** API `GET /api/sites/:id/tasks` — listă unificată: fix-uri audit grupate pe `rule_id`
+  (N pagini → 1 sarcină), oportunități de cuvinte cheie, `roadmap_items`; roadmap-ul cu `keyword_id`
+  înlocuiește sarcina brută pe același cuvânt; sortare deschis→impact↓/efort↑
+- [x] **20.5** Acasă — `Gauge` scor + sparkline istoric, card nivel/XP/streak, „Fă asta acum" (focus
+  task + următorii pași), scor pe categorii, estimare trafic (interval, cu guard pe date lipsă),
+  „ce s-a schimbat", nudge-uri de conectare
+- [x] **20.6** Sarcini — `TaskCard` reutilizabil, chips de filtrare (câștiguri rapide / tehnic /
+  pe pagină / conținut / AI / plan), bară de progres, bifare roadmap inline, drawer `KeywordDetail`
+- [x] **20.7** Cuvinte cheie — gate `ProfileWizard`, strip KPI, chips rank-status, listă de carduri
+  cu poziția mare, drawer detaliu (`?kw=` deschide direct din sarcini)
+- [x] **20.8** Competitori — „unde te bate" în limbaj simplu (câte pagini au ei vs tine pe fiecare grup)
+- [x] **20.9** Setări — verificare + WordPress + GSC + profil business + acțiuni (scanează / reconstruiește)
+- [x] **20.10** `/sites/[siteId]/strategy` → redirect la `/keywords` (compat linkuri vechi)
+- **Gata când:** type-check 12/12, lint curat, `web build` OK (16 rute), `/home` + `/tasks` verificate
+  pe salesup.ro (scor 84, 69 sarcini, 10 din plan). *Screenshot vizual confirmat pe un preview local.*

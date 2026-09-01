@@ -1,234 +1,334 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useHome } from '@/lib/home';
+import { useStartCrawl, useSite } from '@/lib/queries';
+import { useRebuildStrategy } from '@/lib/strategy';
 import {
-  useConnectGsc,
-  useConnectWordpress,
-  useCrawlSummary,
-  useRecomputeEstimate,
-  useSite,
-  useStartCrawl,
-  useTrafficEstimate,
-  useVerifySite,
-} from '@/lib/queries';
-import { CrawlProgress } from '@/components/CrawlProgress';
-import { ScoreBreakdown } from '@/components/ScoreBreakdown';
-import { TrafficBandChart } from '@/components/TrafficBandChart';
-import { Badge, Button, Card, ErrorState, PageHeading, Skeleton } from '@/components/ui';
+  Button,
+  Card,
+  CATEGORY_META,
+  EmptyState,
+  ErrorState,
+  Gauge,
+  levelFromPoints,
+  ProgressBar,
+  SectionTitle,
+  Skeleton,
+  Stat,
+} from '@/components/ui';
+import { TaskCard } from '@/components/TaskCard';
 
-const METHODS = [
-  { id: 'meta_tag', label: 'Meta tag', how: (t: string) => `<meta name="seo-tool-verification" content="${t}">` },
-  { id: 'html_file', label: 'Fișier HTML', how: (t: string) => `Urcă un fișier /${t}.html care conține exact: ${t}` },
-  { id: 'dns_txt', label: 'DNS TXT', how: (t: string) => `Înregistrare TXT: seo-tool-verification=${t}` },
-];
-
-export default function SitePage() {
-  const siteId = useParams().siteId as string;
-  const { data: site, isLoading, error } = useSite(siteId);
-  const verify = useVerifySite(siteId);
-  const startCrawl = useStartCrawl(siteId);
-  const connectGsc = useConnectGsc(siteId);
-  const estimate = useTrafficEstimate(siteId);
-  const recompute = useRecomputeEstimate(siteId);
-  const summary = useCrawlSummary(site?.lastCrawl?.id);
-
-  if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (error) return <ErrorState error={error} />;
-  if (!site) return null;
-
+function Spark({ points }: { points: (number | null)[] }) {
+  const vals = points.filter((p): p is number => p != null);
+  if (vals.length < 2) return null;
+  const w = 120;
+  const h = 34;
+  const min = Math.min(...vals) - 2;
+  const max = Math.max(...vals) + 2;
+  const step = w / (points.length - 1);
+  const d = points
+    .map((p, i) => {
+      if (p == null) return null;
+      const x = i * step;
+      const y = h - ((p - min) / (max - min || 1)) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div className="space-y-6">
-      <PageHeading
-        title={site.domain}
-        subtitle={site.connectionType === 'wordpress' ? 'WordPress conectat' : 'Site universal'}
-        actions={
-          <div className="flex gap-2">
-            {(site.verified || site.wpSiteUrl) && (
-              <Link
-                href={`/sites/${siteId}/strategy`}
-                className="rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-medium dark:border-neutral-700"
-              >
-                Strategie →
-              </Link>
-            )}
-            {site.verified || site.wpSiteUrl ? (
-              <Button
-                disabled={startCrawl.isPending || site.lastCrawl?.status === 'running'}
-                onClick={() => startCrawl.mutate()}
-              >
-                {site.lastCrawl?.status === 'running' ? 'Crawl în curs…' : 'Pornește crawl'}
-              </Button>
-            ) : null}
-          </div>
+    <svg width={w} height={h} className="overflow-visible">
+      <polyline points={d} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export default function SiteHomePage() {
+  const siteId = useParams().siteId as string;
+  const { data: home, isLoading, error } = useHome(siteId);
+  const { data: site } = useSite(siteId);
+  const startCrawl = useStartCrawl(siteId);
+  const rebuild = useRebuildStrategy(siteId);
+
+  if (isLoading) return <Skeleton className="h-96 w-full" />;
+  if (error) return <ErrorState error={error} />;
+  if (!home) return null;
+
+  const crawlRunning = site?.lastCrawl?.status === 'running' || site?.lastCrawl?.status === 'queued';
+  const canScan = home.site.verified || home.site.wpConnected;
+  const neverScanned = !home.crawl && !crawlRunning;
+
+  if (neverScanned) {
+    return (
+      <EmptyState
+        icon="🚀"
+        title="Gata de primul scan"
+        hint={
+          canScan
+            ? 'Pornim un scan complet al site-ului. În câteva minute vei avea un scor de sănătate și o listă de acțiuni în limbaj simplu.'
+            : 'Întâi verifică proprietatea site-ului sau conectează WordPress din Setări, apoi pornim scanul.'
+        }
+        action={
+          canScan ? (
+            <Button onClick={() => startCrawl.mutate()} disabled={startCrawl.isPending}>
+              {startCrawl.isPending ? 'Se pornește…' : 'Pornește scanul'}
+            </Button>
+          ) : (
+            <Link href={`/sites/${siteId}/settings`}>
+              <Button>Mergi la Setări</Button>
+            </Link>
+          )
         }
       />
+    );
+  }
 
-      {(startCrawl.isError || verify.isError) && (
-        <p className="text-sm text-red-600">
-          {((startCrawl.error ?? verify.error) as Error).message}
-        </p>
-      )}
+  const lvl = levelFromPoints(home.gamification.points);
+  const focus = home.tasks.focus;
 
-      {!site.verified && !site.wpSiteUrl && (
-        <Card>
-          <h2 className="font-medium">Verifică proprietatea</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Alege o metodă, aplic-o pe site, apoi apasă „Verifică”. Token:
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Acasă</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            {crawlRunning
+              ? 'Scan în curs — pagina se actualizează singură.'
+              : 'Verificarea ta zilnică: unde stai și ce urmează.'}
           </p>
-          <code className="mt-2 block break-all rounded-lg bg-neutral-100 p-2 text-xs dark:bg-neutral-800">
-            {site.verificationToken}
-          </code>
-          <div className="mt-4 space-y-3">
-            {METHODS.map((m) => (
-              <div key={m.id} className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                <div className="flex items-center justify-between">
-                  <strong>{m.label}</strong>
-                  <Button variant="ghost" onClick={() => verify.mutate(m.id)}>
-                    Verifică
-                  </Button>
-                </div>
-                <p className="mt-1 break-all text-xs text-neutral-500">{m.how(site.verificationToken)}</p>
-              </div>
-            ))}
-          </div>
-          {verify.data && !verify.data.verified && (
-            <p className="mt-3 text-sm text-amber-600">{verify.data.reason}</p>
-          )}
-        </Card>
-      )}
-
-      <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium">WordPress</h2>
-          {site.wpSiteUrl ? <Badge tone="good">conectat</Badge> : <Badge tone="neutral">neconectat</Badge>}
         </div>
-        {site.wpSiteUrl ? (
-          <p className="mt-1 text-sm text-neutral-500">
-            Conectat la <code>{site.wpSiteUrl}</code>. Recomandările marcate ca auto-fixabile pot
-            fi aplicate direct pe site din pagina fiecărei pagini.
-          </p>
-        ) : (
-          <>
-            <p className="mt-1 text-sm text-neutral-500">
-              Conectează prin Application Password (recomandat: instalează pluginul SEO Audit
-              Connector și generează parola din Setări &rarr; SEO Audit).
-            </p>
-            <div className="mt-3">
-              <WpConnect siteId={siteId} />
-            </div>
-          </>
-        )}
-      </Card>
-
-      <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium">Google Search Console</h2>
-          <div className="flex items-center gap-2">
-            {site.gscConnected && <Badge tone="good">conectat</Badge>}
-            <Button variant="ghost" onClick={() => connectGsc.mutate(undefined)}>
-              {site.gscConnected ? 'Reconectează' : 'Conectează'}
-            </Button>
-          </div>
-        </div>
-        <p className="mt-1 text-sm text-neutral-500">
-          Conectat = poziții reale, câștiguri rapide și istoric în Strategie, plus baseline de
-          trafic pentru estimare.
-        </p>
-        {connectGsc.isError && (
-          <p className="mt-2 text-sm text-amber-600">
-            {(connectGsc.error as Error).message.includes('GOOGLE_OAUTH')
-              ? 'Google OAuth nu e configurat (GOOGLE_OAUTH_CLIENT_ID / _SECRET / _REDIRECT_URI în .env). Opțional — estimarea merge și fără GSC, cu încredere „low".'
-              : (connectGsc.error as Error).message}
-          </p>
-        )}
-      </Card>
-
-      {site.lastCrawl && (
-        <Card>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-medium">Ultimul crawl</h2>
-            <Link href={`/crawls/${site.lastCrawl.id}`} className="text-sm text-neutral-500 hover:underline">
-              detalii →
-            </Link>
-          </div>
-          <CrawlProgress crawlId={site.lastCrawl.id} />
-          {summary.data && summary.data.pages > 0 && (
-            <div className="mt-5">
-              <ScoreBreakdown summary={summary.data} />
-            </div>
-          )}
-        </Card>
-      )}
-
-      <Card>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-medium">Estimare trafic</h2>
-          <Button variant="ghost" onClick={() => recompute.mutate()}>
-            Recalculează
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => rebuild.mutate()}
+            disabled={rebuild.isPending}
+          >
+            {rebuild.isPending ? 'Se reface…' : 'Reîmprospătează strategia'}
+          </Button>
+          <Button onClick={() => startCrawl.mutate()} disabled={startCrawl.isPending || crawlRunning}>
+            {crawlRunning ? 'Scan în curs…' : startCrawl.isPending ? 'Se pornește…' : 'Scanează din nou'}
           </Button>
         </div>
-        {estimate.isLoading && <Skeleton className="h-40 w-full" />}
-        {estimate.data ? (
-          <TrafficBandChart estimate={estimate.data} />
+      </div>
+
+      {/* Hero: score + progress */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="flex items-center gap-5 md:col-span-1">
+          <Gauge score={home.score.total} label="Sănătate" delta={home.score.delta} />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Scor de sănătate</div>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Media problemelor tehnice, de conținut și de viteză de pe site. Peste 80 = sănătos.
+            </p>
+            <div className="mt-2">
+              <Spark points={home.score.history.map((h) => h.total)} />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm text-[var(--text-muted)]">Nivelul tău</div>
+              <div className="text-xl font-semibold">
+                {lvl.level}. {lvl.name}
+              </div>
+            </div>
+            <div className="flex gap-4 text-center">
+              <div>
+                <div className="text-xl font-semibold tabular-nums">{home.gamification.streakWeeks}</div>
+                <div className="text-[11px] text-[var(--text-muted)]">săpt. la rând 🔥</div>
+              </div>
+              <div>
+                <div className="text-xl font-semibold tabular-nums">{home.gamification.points}</div>
+                <div className="text-[11px] text-[var(--text-muted)]">acțiuni ✅</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3">
+            <ProgressBar value={lvl.progress} tone="good" />
+            <div className="mt-1 flex justify-between text-[11px] text-[var(--text-muted)]">
+              <span>
+                {lvl.xpInLevel}/{lvl.xpForLevel} până la nivelul {lvl.level + 1}
+              </span>
+              <span>
+                {home.gamification.appliedFixes} reparate · {home.gamification.doneRoadmap} din plan
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <Stat label="De făcut" value={home.tasks.open} />
+            <Stat label="Câștiguri rapide" value={home.tasks.quickWins} tone="good" />
+            <Stat label="Cuvinte în top 10" value={home.keywords.top10} />
+          </div>
+        </Card>
+      </div>
+
+      {/* Do this now */}
+      <div>
+        <SectionTitle hint={<Link href={`/sites/${siteId}/tasks`}>vezi toate →</Link>}>
+          Fă asta acum
+        </SectionTitle>
+        {focus ? (
+          <div className="space-y-3">
+            <TaskCard
+              task={focus}
+              defaultOpen
+              emphasis
+              actions={<TaskActions siteId={siteId} task={focus} />}
+            />
+            {home.tasks.next.map((t) => (
+              <TaskCard key={t.id} task={t} actions={<TaskActions siteId={siteId} task={t} />} />
+            ))}
+          </div>
         ) : (
-          <p className="text-sm text-neutral-500">
-            Nicio estimare încă. Rulează un crawl complet, apoi „Recalculează”.
-          </p>
+          <EmptyState
+            icon="🎉"
+            title="Nicio acțiune deschisă"
+            hint="Ai rezolvat tot ce era pe listă. Scanează din nou peste câteva zile ca să prinzi ce apare nou."
+          />
         )}
-      </Card>
+      </div>
+
+      {/* Score breakdown */}
+      {home.crawl && (
+        <div>
+          <SectionTitle
+            hint={<Link href={`/crawls/${home.crawl.id}`}>raport complet →</Link>}
+          >
+            Pe categorii
+          </SectionTitle>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {(['technical', 'cwv', 'onpage', 'content', 'geo'] as const).map((c) => {
+              const v = home.score.categories[c];
+              return (
+                <div
+                  key={c}
+                  className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] p-3 text-center"
+                >
+                  <div className="text-lg" aria-hidden>
+                    {CATEGORY_META[c]?.icon}
+                  </div>
+                  <div className="text-xl font-semibold tabular-nums">{v ?? '—'}</div>
+                  <div className="text-[11px] text-[var(--text-muted)]">{CATEGORY_META[c]?.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Traffic + changes */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <SectionTitle>Estimare de trafic</SectionTitle>
+          {home.traffic && home.traffic.high > 0 ? (
+            <>
+              <div className="flex items-end gap-2">
+                <span className="text-2xl font-semibold tabular-nums">
+                  {home.traffic.low.toLocaleString('ro-RO')}–{home.traffic.high.toLocaleString('ro-RO')}
+                </span>
+                <span className="pb-1 text-xs text-[var(--text-muted)]">
+                  vizite/lună în {home.traffic.horizonMonths} luni
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Interval, nu o promisiune. Încredere: {home.traffic.confidence} · bază:{' '}
+                {home.traffic.baselineSource === 'gsc' ? 'date reale GSC' : 'model de cuvinte cheie'}.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">
+              {home.site.gscConnected
+                ? 'Prea puține date de trafic momentan. Se completează pe măsură ce Search Console acumulează istoric.'
+                : 'Estimarea devine utilă după ce conectezi Google Search Console (Setări).'}
+            </p>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle>Ce s-a schimbat</SectionTitle>
+          {home.changes.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {home.changes.map((c, i) => (
+                <li key={i} className="flex gap-2">
+                  <span aria-hidden>{c.tone === 'good' ? '📈' : c.tone === 'bad' ? '📉' : '•'}</span>
+                  <span className="text-[var(--text-muted)]">{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">
+              {home.site.gscConnected
+                ? 'Încă nu avem două măsurători ca să comparăm. Revino peste o săptămână.'
+                : 'Conectează Google Search Console în Setări ca să urmărim automat mișcările de poziție.'}
+            </p>
+          )}
+        </Card>
+      </div>
+
+      {/* Connection nudges */}
+      {(!home.site.gscConnected || !home.site.wpConnected) && (
+        <Card>
+          <SectionTitle>Pune pilotul automat la treabă</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {!home.site.gscConnected && (
+              <Link
+                href={`/sites/${siteId}/settings`}
+                className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3 text-sm hover:border-[var(--border-strong)]"
+              >
+                <div className="font-medium">Conectează Google Search Console</div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Poziții reale, câștiguri rapide și tracking săptămânal automat.
+                </div>
+              </Link>
+            )}
+            {!home.site.wpConnected && (
+              <Link
+                href={`/sites/${siteId}/settings`}
+                className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3 text-sm hover:border-[var(--border-strong)]"
+              >
+                <div className="font-medium">Conectează WordPress</div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Ca să aplici reparațiile sigure cu un singur clic.
+                </div>
+              </Link>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
 
-function WpConnect({ siteId }: { siteId: string }) {
-  const connect = useConnectWordpress(siteId);
-  const [wpSiteUrl, setWpSiteUrl] = useState('');
-  const [username, setUsername] = useState('');
-  const [applicationPassword, setApplicationPassword] = useState('');
-
-  return (
-    <div>
-      <form
-        className="space-y-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          connect.mutate({ wpSiteUrl, username, applicationPassword });
-        }}
-      >
-        <input
-          required
-          value={wpSiteUrl}
-          onChange={(e) => setWpSiteUrl(e.target.value)}
-          placeholder="https://site.tld"
-          className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-        />
-        <input
-          required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="utilizator WP"
-          className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-        />
-        <input
-          required
-          type="password"
-          value={applicationPassword}
-          onChange={(e) => setApplicationPassword(e.target.value)}
-          placeholder="Application Password"
-          className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-        />
-        <Button type="submit" disabled={connect.isPending}>
-          {connect.isPending ? 'Se testează…' : 'Conectează'}
+function TaskActions({ siteId, task }: { siteId: string; task: import('@/lib/home').HomeTask }) {
+  if (task.kind === 'fix' && task.pageId) {
+    return (
+      <Link href={`/pages/${task.pageId}`}>
+        <Button size="sm" variant={task.autoFixable ? 'primary' : 'ghost'}>
+          {task.autoFixable ? 'Rezolvă →' : 'Vezi cum →'}
         </Button>
-        {connect.isError && <p className="text-sm text-red-600">{(connect.error as Error).message}</p>}
-        {connect.data?.ok && (
-          <p className="text-sm text-emerald-600">
-            Conectat{connect.data.seoPlugin ? ` · plugin SEO: ${connect.data.seoPlugin}` : ''}.
-          </p>
-        )}
-      </form>
-    </div>
-  );
+      </Link>
+    );
+  }
+  if (task.kind === 'keyword' && task.keywordId) {
+    return (
+      <Link href={`/sites/${siteId}/keywords?kw=${task.keywordId}`}>
+        <Button size="sm" variant="ghost">
+          Deschide planul →
+        </Button>
+      </Link>
+    );
+  }
+  if (task.kind === 'roadmap') {
+    return (
+      <Link href={`/sites/${siteId}/tasks`}>
+        <Button size="sm" variant="ghost">
+          Bifează în Sarcini →
+        </Button>
+      </Link>
+    );
+  }
+  return null;
 }

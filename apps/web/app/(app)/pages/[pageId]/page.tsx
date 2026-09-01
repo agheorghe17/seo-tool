@@ -40,9 +40,20 @@ export default function PageDetail() {
         subtitle={p.url}
         actions={
           page.data.crawlId && (
-            <Link href={`/crawls/${page.data.crawlId}`} className="text-sm text-neutral-500 hover:underline">
-              ← înapoi la crawl
-            </Link>
+            <div className="flex gap-3 text-sm">
+              <Link
+                href={`/sites/${page.data.siteId}/tasks`}
+                className="text-[var(--text-muted)] hover:text-[var(--text)]"
+              >
+                ← Sarcini
+              </Link>
+              <Link
+                href={`/crawls/${page.data.crawlId}`}
+                className="text-[var(--text-muted)] hover:text-[var(--text)]"
+              >
+                raport crawl
+              </Link>
+            </div>
           )
         }
       />
@@ -51,7 +62,7 @@ export default function PageDetail() {
         {(['scoreTotal', 'scoreTechnical', 'scoreCwv', 'scoreOnpage', 'scoreContent', 'scoreGeo'] as const).map(
           (k) => (
             <Card key={k}>
-              <div className="text-xs text-neutral-500">
+              <div className="text-xs text-[var(--text-muted)]">
                 {k.replace('score', '').toLowerCase() || 'total'}
               </div>
               <div className="mt-1 text-2xl font-semibold">
@@ -87,9 +98,9 @@ export default function PageDetail() {
                 </div>
                 <ul className="space-y-1 text-sm">
                   {grouped[sev].map((i) => (
-                    <li key={i.id} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-                      <span className="text-neutral-500">{i.ruleId}</span> — {i.description}
-                      {i.detectedValue && <span className="text-neutral-400"> ({i.detectedValue})</span>}
+                    <li key={i.id} className="rounded-lg border border-[var(--border)] p-3">
+                      <span className="text-[var(--text-muted)]">{i.ruleId}</span> — {i.description}
+                      {i.detectedValue && <span className="text-[var(--text-faint)]"> ({i.detectedValue})</span>}
                     </li>
                   ))}
                 </ul>
@@ -118,7 +129,7 @@ export default function PageDetail() {
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="text-xs text-[var(--text-muted)]">{label}</div>
       <div className="font-medium">{value}</div>
     </div>
   );
