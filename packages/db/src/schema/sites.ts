@@ -26,6 +26,9 @@ export const sites = pgTable(
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     gscConnected: boolean('gsc_connected').notNull().default(false),
     gscProperty: text('gsc_property'),
+    // Autopilot (Epic 21) — optional Google Analytics 4 + Business Profile links.
+    ga4Property: text('ga4_property'),
+    gbpLocation: text('gbp_location'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('sites_user_domain_uq').on(t.userId, t.domain)],

@@ -334,3 +334,33 @@ scor de sănătate + nivel/XP/streak, listă unică de sarcini în limbaj simplu
 - [x] **20.10** `/sites/[siteId]/strategy` → redirect la `/keywords` (compat linkuri vechi)
 - **Gata când:** type-check 12/12, lint curat, `web build` OK (16 rute), `/home` + `/tasks` verificate
   pe salesup.ro (scor 84, 69 sarcini, 10 din plan). *Screenshot vizual confirmat pe un preview local.*
+
+## Epic 21 — „Autopilot" (model AYSA.ai, fără API plătit)
+
+Pivot spre model de agent: „spune ce vrei → aprobă → gata". UI minimal (fără gamificare),
+generare de conținut prin copy-paste în Claude-ul utilizatorului (zero cost API).
+
+- [x] **21.1** DB `0004_autopilot` — tabel `content_drafts`; `sites.ga4_property` / `sites.gbp_location`;
+  enum `secret_kind` += `ga4_refresh_token` / `gbp_refresh_token`; enum `content_status`; RLS `content_drafts`
+- [x] **21.2** UI minimal — tab-uri `Autopilot · Aprobări · Conținut · Analiză · Setări`
+  (`layout.tsx`); `page.tsx` rescris: casetă de comandă (rutare de intenție deterministă), 2 gauge
+  (Sănătate + Vizibilitate AI) cu sparkline, „Ce se întâmplă acum", coada de aprobare, semnale.
+  Scos din `ui.tsx`: `levelFromPoints` / niveluri / XP / streak
+- [x] **21.3** `GET /api/sites/:id/home` — adăugat `aiVisibility { score, delta, history }` (categoria
+  `geo` promovată) + `signals[]` (rank_up/down, refresh_needed, competitor_move, answer_gap,
+  content_ready); nou `GET /api/sites/:id/signals`
+- [x] **21.4** Reguli GEO noi — `geo.answer-ready` (întrebări-heading fără schema FAQ),
+  `geo.tldr` (rezumat „Pe scurt" pe pagini lungi), `onpage.localbusiness-schema` (schema
+  LocalBusiness/Organization pe home/contact) + intrări în `catalog.ts` + 6 teste noi
+- [x] **21.5** Conținut asistat — `routes/content.ts`: `GET /content` (idei din playbooks + drafturi),
+  `POST /content/:kwId/start` (asamblează prompt din brief + profil + H2 competitori; interzice
+  statistici inventate + promisiuni de poziție), `PUT /content/:id` (lipești articolul),
+  `POST /content/:id/publish` (draft WP prin `wordpress.createDraftPost`, **niciodată** `publish`),
+  `POST /content/:id/discard`; `shared/markdown.ts` (`mdToHtml`, testat); tab `content/page.tsx`
+- [x] **21.6** GA4 — `connectors/ga4.ts` (OAuth reuse, scope `analytics.readonly`, `runReport`,
+  `accountSummaries`); `routes/analytics.ts` (`POST /ga/connect`, `GET /sites/ga/callback`,
+  `GET /ga/traffic` cu cache 6h); card în Setări
+- [x] **21.7** GBP — `connectors/gbp.ts` schelet complet în spatele `FEATURE_GBP=off` (API-ul cere
+  aprobare Google); notă + link în Setări; SEO local acoperit acum prin regula `onpage.localbusiness-schema`
+- **Gata când:** type-check 12/12, lint curat, `web build` OK (17 rute), 114 teste; `/home` cu
+  `aiVisibility`+`signals` și fluxul de conținut (start→save→discard) verificate pe salesup.ro.

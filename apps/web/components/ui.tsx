@@ -232,42 +232,6 @@ export function ProgressBar({
   );
 }
 
-export interface LevelInfo {
-  level: number;
-  name: string;
-  xp: number;
-  xpInLevel: number;
-  xpForLevel: number;
-  progress: number;
-}
-
-const LEVEL_NAMES = [
-  'Începător',
-  'Explorator',
-  'Constructor',
-  'Optimizator',
-  'Strateg',
-  'Avansat',
-  'Expert',
-  'Maestru',
-];
-
-/** Simple escalating curve: level n needs 5·n·(n+1) total XP. 1 XP ≈ one completed action. */
-export function levelFromPoints(points: number): LevelInfo {
-  let level = 1;
-  while (5 * (level + 1) * (level + 2) <= points) level++;
-  const floor = 5 * level * (level + 1);
-  const ceil = 5 * (level + 1) * (level + 2);
-  return {
-    level,
-    name: LEVEL_NAMES[Math.min(level - 1, LEVEL_NAMES.length - 1)] ?? 'Avansat',
-    xp: points,
-    xpInLevel: points - floor,
-    xpForLevel: ceil - floor,
-    progress: (points - floor) / (ceil - floor),
-  };
-}
-
 export function Stat({
   label,
   value,

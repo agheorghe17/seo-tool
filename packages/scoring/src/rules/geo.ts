@@ -63,4 +63,74 @@ export const scannableRule: Rule = {
   },
 };
 
-export const geoRules: Rule[] = [schemaPresentRule, answerableSchemaRule, scannableRule];
+const QUESTION_STARTERS =
+  /^(cum|ce|de ce|c[âa]nd|care|c[âa]t|c[âa]te|c[âa]ți|unde|cine|is|what|why|how|when|where|which|who|does|can|should)\b/i;
+
+function isQuestionHeading(text: string): boolean {
+  const t = text.trim();
+  return t.endsWith('?') || QUESTION_STARTERS.test(t);
+}
+
+/**
+ * Epic 21 — "answer-ready" gap. Pages that pose questions in their headings but don't
+ * mark them up as FAQ/QA schema miss AI Overviews / answer-engine extraction.
+ */
+export const answerReadyRule: Rule = {
+  id: 'geo.answer-ready',
+  version: 1,
+  category: 'geo',
+  severity: 'info',
+  fixTitle: 'Marchează întrebările din pagină ca FAQ (schema FAQPage) cu răspunsuri scurte',
+  impactHint: 3,
+  effortHint: 2,
+  penalty: 22,
+  check(page) {
+    const questions = page.headings.filter((h) => h.level >= 2 && isQuestionHeading(h.text));
+    if (questions.length < 2) return { passed: true };
+    const marked = page.schemaTypes.some((t) => t === 'FAQPage' || t === 'QAPage');
+    return marked
+      ? { passed: true }
+      : {
+          passed: false,
+          description: `${questions.length} întrebări în titluri, fără schema FAQ — nefolosibile ca răspuns în AI Overviews.`,
+          detectedValue: String(questions.length),
+        };
+  },
+};
+
+/**
+ * Epic 21 — a short summary near the top of long pages is the block AI answer engines
+ * quote most often.
+ */
+export const tldrRule: Rule = {
+  id: 'geo.tldr',
+  version: 1,
+  category: 'geo',
+  severity: 'info',
+  fixTitle: 'Adaugă un rezumat „Pe scurt" în partea de sus a paginilor lungi',
+  impactHint: 2,
+  effortHint: 2,
+  penalty: 15,
+  check(page) {
+    if (page.wordCount < 600) return { passed: true };
+    const topHeadings = page.headings.filter((h) => h.level >= 2).slice(0, 4);
+    const hasTldr = topHeadings.some((h) =>
+      /(pe scurt|rezumat|tl;?dr|key takeaways|concluzii|în rezumat|pe scurt despre)/i.test(h.text),
+    );
+    return hasTldr
+      ? { passed: true }
+      : {
+          passed: false,
+          description: `Pagină lungă (${page.wordCount} cuvinte) fără un rezumat „Pe scurt" în partea de sus.`,
+          detectedValue: null,
+        };
+  },
+};
+
+export const geoRules: Rule[] = [
+  schemaPresentRule,
+  answerableSchemaRule,
+  scannableRule,
+  answerReadyRule,
+  tldrRule,
+];

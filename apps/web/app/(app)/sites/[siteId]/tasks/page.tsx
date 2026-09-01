@@ -42,9 +42,9 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Sarcini</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Aprobări</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Tot ce ai de făcut, într-o singură listă, ordonat după impact. Fără jargon.
+          Aprobă și se rezolvă. Fix-urile sigure se aplică pe site, conținutul devine draft în WordPress.
         </p>
       </div>
 
@@ -138,16 +138,21 @@ function TaskActions({
   }
   if (task.kind === 'keyword' && task.keywordId) {
     return (
-      <Button size="sm" variant="ghost" onClick={() => onOpenKw(task.keywordId!)}>
-        Deschide planul
-      </Button>
+      <div className="flex gap-2">
+        <Link href={`/sites/${siteId}/content`}>
+          <Button size="sm">Scrie articolul</Button>
+        </Link>
+        <Button size="sm" variant="ghost" onClick={() => onOpenKw(task.keywordId!)}>
+          Vezi planul
+        </Button>
+      </div>
     );
   }
   if (task.kind === 'fix' && task.pageId) {
     return (
       <Link href={`/pages/${task.pageId}`}>
         <Button size="sm" variant={task.autoFixable ? 'primary' : 'ghost'}>
-          {task.autoFixable ? 'Rezolvă automat' : 'Vezi cum se face'}
+          {task.autoFixable ? 'Aprobă și rezolvă' : 'Vezi cum se face'}
         </Button>
       </Link>
     );

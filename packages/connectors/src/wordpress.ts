@@ -200,6 +200,120 @@ export async function testConnection(
   return { ok: true, restBase, types, seoPlugin };
 }
 
+async function wpPost<T>(
+  creds: WpCredentials,
+  path: string,
+  body: unknown,
+  opts: WpClientOptions,
+): Promise<{ status: number; body: T | null }> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const res = await doFetch(`${restBaseFor(creds.siteUrl)}${path}`, {
+    method: 'POST',
+    headers: {
+      authorization: authHeader(creds),
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  let parsed: T | null = null;
+  try {
+    parsed = (await res.json()) as T;
+  } catch {
+    parsed = null;
+  }
+  return { status: res.status, body: parsed };
+}
+
+export interface DraftPostInput {
+  title: string;
+  contentHtml: string;
+  slug?: string;
+  excerpt?: string;
+}
+
+export interface DraftPostResult {
+  ok: boolean;
+  postId?: number;
+  editLink?: string;
+  link?: string;
+  reason?: string;
+}
+
+/**
+ * Epic 21 — create a WordPress post as a DRAFT (never published live). The user
+ * reviews and publishes from WordPress itself. Assisted-content flow only.
+ */
+export async function createDraftPost(
+  creds: WpCredentials,
+  input: DraftPostInput,
+  opts: WpClientOptions = {},
+): Promise<DraftPostResult> {
+  const res = await wpPost<{
+    id?: number;
+    link?: string;
+    code?: string;
+    message?: string;
+    guid?: { rendered?: string };
+  }>(
+    creds,
+    '/wp/v2/posts',
+    {
+      status: 'draft', // hard-coded — this function never publishes
+      title: input.title,
+      content: input.contentHtml,
+      ...(input.slug ? { slug: input.slug } : {}),
+      ...(input.excerpt ? { excerpt: input.excerpt } : {}),
+    },
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+
+  if (res.status === 201 || (res.status === 200 && res.body?.id)) {
+    const id = res.body?.id;
+    return {
+      ok: true,
+      postId: id,
+      link: res.body?.link,
+      editLink: id ? `${normaliseSiteUrl(creds.siteUrl)}/wp-admin/post.php?post=${id}&action=edit` : undefined,
+    };
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, reason: 'Userul WordPress nu are permisiunea de a crea articole (edit_posts).' };
+  }
+  return {
+    ok: false,
+    reason: res.body?.message ?? `WordPress a răspuns ${res.status} la crearea articolului.`,
+  };
+}
+
+/** Update the body/title of an existing draft (keeps it a draft). */
+export async function updateDraftPost(
+  creds: WpCredentials,
+  postId: number,
+  input: Partial<DraftPostInput>,
+  opts: WpClientOptions = {},
+): Promise<DraftPostResult> {
+  const res = await wpPost<{ id?: number; link?: string; message?: string }>(
+    creds,
+    `/wp/v2/posts/${postId}`,
+    {
+      ...(input.title != null ? { title: input.title } : {}),
+      ...(input.contentHtml != null ? { content: input.contentHtml } : {}),
+      ...(input.slug ? { slug: input.slug } : {}),
+    },
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+  if (res.status >= 200 && res.status < 300 && res.body?.id) {
+    return {
+      ok: true,
+      postId: res.body.id,
+      link: res.body.link,
+      editLink: `${normaliseSiteUrl(creds.siteUrl)}/wp-admin/post.php?post=${res.body.id}&action=edit`,
+    };
+  }
+  return { ok: false, reason: res.body?.message ?? `update ${res.status}` };
+}
+
 async function wpPatch<T>(
   creds: WpCredentials,
   path: string,

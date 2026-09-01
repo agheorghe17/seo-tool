@@ -2,6 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { and, avg, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   businessProfiles,
+  competitorPages,
+  competitors,
+  contentDrafts,
   crawls,
   db,
   issues,
@@ -16,6 +19,140 @@ import {
   trafficEstimates,
 } from 'db';
 import { requireAuth } from '../middleware/auth.js';
+
+export interface Signal {
+  type: 'rank_up' | 'rank_down' | 'refresh_needed' | 'competitor_move' | 'answer_gap' | 'content_ready';
+  tone: 'good' | 'bad' | 'neutral';
+  text: string;
+  href: string;
+}
+
+/** Live signals for the Autopilot screen — "what changed / what needs attention". */
+async function buildSignals(
+  siteId: string,
+  crawlId: string | null,
+): Promise<Signal[]> {
+  const out: Signal[] = [];
+
+  // Rank movements (from GSC/SERP snapshots).
+  const moves = await db
+    .select({
+      keyword: keywordData.keyword,
+      position: rankSnapshots.position,
+      at: rankSnapshots.capturedAt,
+    })
+    .from(rankSnapshots)
+    .innerJoin(keywordData, eq(keywordData.id, rankSnapshots.keywordId))
+    .where(eq(rankSnapshots.siteId, siteId))
+    .orderBy(desc(rankSnapshots.capturedAt))
+    .limit(200);
+  const byKw = new Map<string, number[]>();
+  for (const m of moves) {
+    if (m.position == null) continue;
+    const arr = byKw.get(m.keyword) ?? [];
+    arr.push(m.position);
+    byKw.set(m.keyword, arr);
+  }
+  for (const [kw, snaps] of byKw) {
+    if (snaps.length < 2) continue;
+    const d = snaps[1]! - snaps[0]!; // positive = improved
+    if (Math.abs(d) < 3) continue;
+    out.push({
+      type: d > 0 ? 'rank_up' : 'rank_down',
+      tone: d > 0 ? 'good' : 'bad',
+      text:
+        d > 0
+          ? `„${kw}" a urcat de la poziția ${Math.round(snaps[1]!)} la ${Math.round(snaps[0]!)}`
+          : `„${kw}" a coborât de la poziția ${Math.round(snaps[1]!)} la ${Math.round(snaps[0]!)}`,
+      href: 'keywords',
+    });
+    if (out.length >= 4) break;
+  }
+
+  // Answer-ready gap (from the geo.answer-ready rule on the latest crawl).
+  if (crawlId) {
+    const [ag] = await db
+      .select({ n: sql<number>`count(distinct ${issues.pageId})::int` })
+      .from(issues)
+      .innerJoin(pages, eq(pages.id, issues.pageId))
+      .where(and(eq(pages.crawlId, crawlId), eq(issues.ruleId, 'geo.answer-ready')));
+    const n = Number(ag?.n ?? 0);
+    if (n > 0) {
+      out.push({
+        type: 'answer_gap',
+        tone: 'neutral',
+        text: `${n} ${n === 1 ? 'pagină pune întrebări' : 'pagini pun întrebări'} fără schema FAQ — pierzi apariții în AI Overviews`,
+        href: 'tasks',
+      });
+    }
+
+    // Thin pages worth refreshing.
+    const thin = await db
+      .select({ url: pages.url, score: pages.scoreContent })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.crawlId, crawlId),
+          eq(pages.indexability, 'indexable'),
+          sql`${pages.scoreContent} is not null and ${pages.scoreContent} < 55`,
+        ),
+      )
+      .orderBy(pages.scoreContent)
+      .limit(3);
+    for (const t of thin) {
+      let path = t.url;
+      try {
+        path = new URL(t.url).pathname || '/';
+      } catch {
+        /* keep */
+      }
+      out.push({
+        type: 'refresh_needed',
+        tone: 'neutral',
+        text: `Pagina ${path} are conținut subțire — merită extinsă`,
+        href: 'tasks',
+      });
+    }
+  }
+
+  // Competitor moves: new pages in the last 7 days on competitors that were
+  // already being tracked more than 7 days ago (so the first crawl doesn't count).
+  const [cm] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(competitorPages)
+    .innerJoin(competitors, eq(competitors.id, competitorPages.competitorId))
+    .where(
+      and(
+        eq(competitors.siteId, siteId),
+        sql`${competitorPages.createdAt} > now() - interval '7 days'`,
+        sql`${competitors.createdAt} < now() - interval '7 days'`,
+      ),
+    );
+  if (cm && Number(cm.n) > 0) {
+    out.push({
+      type: 'competitor_move',
+      tone: 'neutral',
+      text: `Competitorii au ${Number(cm.n)} pagini noi în ultima săptămână`,
+      href: 'competitors',
+    });
+  }
+
+  // Content drafts waiting to be published.
+  const [cr] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(contentDrafts)
+    .where(and(eq(contentDrafts.siteId, siteId), eq(contentDrafts.status, 'review')));
+  if (cr && Number(cr.n) > 0) {
+    out.push({
+      type: 'content_ready',
+      tone: 'good',
+      text: `${Number(cr.n)} ${Number(cr.n) === 1 ? 'articol scris așteaptă' : 'articole scrise așteaptă'} publicarea`,
+      href: 'content',
+    });
+  }
+
+  return out;
+}
 
 async function ownedSite(userId: string, siteId: string) {
   const [row] = await db
@@ -264,6 +401,7 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
         crawlId: crawls.id,
         at: sql<string>`coalesce(${crawls.completedAt}, ${crawls.createdAt})`,
         total: avg(pages.scoreTotal),
+        geo: avg(pages.scoreGeo),
       })
       .from(crawls)
       .leftJoin(pages, eq(pages.crawlId, crawls.id))
@@ -273,8 +411,12 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
       .groupBy(crawls.id, crawls.completedAt, crawls.createdAt)
       .orderBy(desc(sql`coalesce(${crawls.completedAt}, ${crawls.createdAt})`))
       .limit(8);
+    const rnd = (v: unknown) => (v == null ? null : Math.round(Number(v)));
     const history = historyRows
-      .map((r) => ({ crawlId: r.crawlId, at: r.at, total: r.total == null ? null : Math.round(Number(r.total)) }))
+      .map((r) => ({ crawlId: r.crawlId, at: r.at, total: rnd(r.total) }))
+      .reverse();
+    const geoHistory = historyRows
+      .map((r) => ({ crawlId: r.crawlId, at: r.at, total: rnd(r.geo) }))
       .reverse();
 
     let categories: Record<string, number | null> = {
@@ -310,6 +452,11 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
     const prev = history.length >= 2 ? history[history.length - 2]!.total : null;
     const delta = scoreTotal != null && prev != null ? scoreTotal - prev : null;
 
+    // AI visibility = the GEO category, promoted to a headline metric.
+    const aiScore = categories.geo ?? (geoHistory.length ? geoHistory[geoHistory.length - 1]!.total : null);
+    const aiPrev = geoHistory.length >= 2 ? geoHistory[geoHistory.length - 2]!.total : null;
+    const aiDelta = aiScore != null && aiPrev != null ? aiScore - aiPrev : null;
+
     // Gamification.
     const [appliedFixes, doneRoadmap, profile, estimateRow] = await Promise.all([
       db
@@ -337,41 +484,7 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
     ];
     const points = appliedFixes.length + doneRoadmap.length;
 
-    // "What changed" — recent rank movements from GSC/SERP snapshots.
-    const moves = await db
-      .select({
-        keyword: keywordData.keyword,
-        position: rankSnapshots.position,
-        at: rankSnapshots.capturedAt,
-      })
-      .from(rankSnapshots)
-      .innerJoin(keywordData, eq(keywordData.id, rankSnapshots.keywordId))
-      .where(eq(rankSnapshots.siteId, site.id))
-      .orderBy(desc(rankSnapshots.capturedAt))
-      .limit(120);
-    const byKw = new Map<string, { position: number; at: Date }[]>();
-    for (const m of moves) {
-      if (m.position == null) continue;
-      const arr = byKw.get(m.keyword) ?? [];
-      arr.push({ position: m.position, at: m.at });
-      byKw.set(m.keyword, arr);
-    }
-    const changes: { text: string; tone: 'good' | 'bad' | 'neutral' }[] = [];
-    for (const [kw, snaps] of byKw) {
-      if (snaps.length < 2) continue;
-      const [latest, before] = snaps; // desc order
-      const d = before!.position - latest!.position;
-      if (Math.abs(d) < 1.5) continue;
-      changes.push({
-        text:
-          d > 0
-            ? `Ai urcat de la poziția ${Math.round(before!.position)} la ${Math.round(latest!.position)} pentru „${kw}”`
-            : `Ai coborât de la poziția ${Math.round(before!.position)} la ${Math.round(latest!.position)} pentru „${kw}”`,
-        tone: d > 0 ? 'good' : 'bad',
-      });
-      if (changes.length >= 6) break;
-    }
-
+    const signals = await buildSignals(site.id, crawl?.id ?? null);
     const est = estimateRow[0];
 
     // Keyword KPIs.
@@ -398,6 +511,7 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
           hasSecrets: secrets.map((s) => s.kind),
         },
         score: { total: scoreTotal, delta, history, categories },
+        aiVisibility: { score: aiScore, delta: aiDelta, history: geoHistory },
         crawl: crawl
           ? { id: crawl.id, status: crawl.status, pagesScanned: crawl.scanned, at: crawl.at ?? crawl.created }
           : null,
@@ -431,9 +545,16 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
               assumptions: est.assumptions,
             }
           : null,
-        changes,
+        signals: signals.slice(0, 6),
         strategyReady: !!profile[0]?.confirmedAt && Number(kagg?.total ?? 0) > 0,
       },
     };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/sites/:id/signals', async (req, reply) => {
+    const site = await ownedSite(req.userId!, req.params.id);
+    if (!site) return reply.code(404).send({ error: 'not found' });
+    const crawl = await latestScoredCrawl(site.id);
+    return { signals: await buildSignals(site.id, crawl?.id ?? null) };
   });
 }

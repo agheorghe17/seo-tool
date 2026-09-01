@@ -6,6 +6,8 @@ import { captureError, initSentry, LOG_REDACT } from './observability.js';
 import { billingRoutes } from './routes/billing.js';
 import { crawlRoutes } from './routes/crawls.js';
 import { estimateRoutes } from './routes/estimates.js';
+import { analyticsRoutes } from './routes/analytics.js';
+import { contentRoutes } from './routes/content.js';
 import { healthRoutes } from './routes/health.js';
 import { homeRoutes } from './routes/home.js';
 import { meRoutes } from './routes/me.js';
@@ -71,6 +73,8 @@ await app.register(meRoutes);
 await app.register(billingRoutes);
 await app.register(strategyRoutes);
 await app.register(homeRoutes);
+await app.register(contentRoutes);
+await app.register(analyticsRoutes);
 
 const close = async (signal: string) => {
   app.log.info(`${signal} received, shutting down`);

@@ -14,6 +14,8 @@ export interface SiteDto {
   verifiedAt: string | null;
   verified: boolean;
   gscConnected: boolean;
+  ga4Property: string | null;
+  gbpLocation: string | null;
   wpSiteUrl: string | null;
   lastCrawl: CrawlDto | null;
 }
@@ -279,6 +281,20 @@ export function useConnectGsc(siteId: string) {
         method: 'POST',
         token,
         body: JSON.stringify(property ? { property } : {}),
+      }),
+    onSuccess: (r) => {
+      if (typeof window !== 'undefined') window.location.href = r.authUrl;
+    },
+  });
+}
+
+export function useConnectGa(siteId: string) {
+  const token = useToken();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ authUrl: string }>(`/api/sites/${siteId}/ga/connect`, {
+        method: 'POST',
+        token,
       }),
     onSuccess: (r) => {
       if (typeof window !== 'undefined') window.location.href = r.authUrl;

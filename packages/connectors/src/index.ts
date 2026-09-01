@@ -2,6 +2,8 @@ export * as psi from './psi.js';
 export * as crux from './crux.js';
 export * as wordpress from './wordpress.js';
 export * as gsc from './gsc.js';
+export * as ga4 from './ga4.js';
+export * as gbp from './gbp.js';
 export * as dataforseo from './dataforseo.js';
 export * as autocomplete from './autocomplete.js';
 export * as keywordplanner from './keywordplanner.js';

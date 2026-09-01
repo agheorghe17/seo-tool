@@ -18,6 +18,7 @@ function makePage(overrides: Partial<PageData> = {}): PageData {
     h1: 'Widgets',
     headings: [
       { level: 1, text: 'Widgets' },
+      { level: 2, text: 'Pe scurt' },
       { level: 2, text: 'Blue widgets' },
       { level: 2, text: 'Red widgets' },
     ],
@@ -112,6 +113,57 @@ describe('scorePage — content & geo', () => {
     expect(issues.map((i) => i.ruleId)).toEqual(
       expect.arrayContaining(['geo.schema-present', 'geo.answerable-schema', 'geo.scannable']),
     );
+  });
+
+  it('flags question headings that are not marked up as FAQ (geo.answer-ready)', () => {
+    const { issues } = scorePage(
+      makePage({
+        schemaTypes: ['Article'],
+        headings: [
+          { level: 1, text: 'Ghid' },
+          { level: 2, text: 'Cât costă un site?' },
+          { level: 2, text: 'Cum aleg agenția?' },
+        ],
+      }),
+      ctx(),
+    );
+    expect(issues.find((i) => i.ruleId === 'geo.answer-ready')?.detectedValue).toBe('2');
+  });
+
+  it('passes geo.answer-ready when FAQPage schema is present', () => {
+    const { issues } = scorePage(
+      makePage({
+        schemaTypes: ['FAQPage'],
+        headings: [
+          { level: 1, text: 'Ghid' },
+          { level: 2, text: 'Cât costă?' },
+          { level: 2, text: 'Cum aleg?' },
+        ],
+      }),
+      ctx(),
+    );
+    expect(issues.find((i) => i.ruleId === 'geo.answer-ready')).toBeUndefined();
+  });
+
+  it('flags a long page without a "Pe scurt" summary (geo.tldr)', () => {
+    const { issues } = scorePage(
+      makePage({ wordCount: 1200, headings: [{ level: 1, text: 'T' }, { level: 2, text: 'Detalii' }] }),
+      ctx(),
+    );
+    expect(issues.some((i) => i.ruleId === 'geo.tldr')).toBe(true);
+  });
+
+  it('flags a contact page missing LocalBusiness schema (onpage.localbusiness-schema)', () => {
+    const { issues } = scorePage(
+      makePage({ url: 'https://example.com/contact', schemaTypes: ['Article'] }),
+      ctx(),
+    );
+    expect(issues.some((i) => i.ruleId === 'onpage.localbusiness-schema')).toBe(true);
+  });
+
+  it('passes onpage.localbusiness-schema on a normal page', () => {
+    const { issues } = scorePage(makePage({ url: 'https://example.com/blog/post' }), ctx());
+    expect(issues.some((i) => i.ruleId === 'onpage.localbusiness-schema')).toBe(false);
   });
 });
 

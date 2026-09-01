@@ -6,10 +6,10 @@ import { useParams, usePathname } from 'next/navigation';
 import { useSite } from '@/lib/queries';
 
 const TABS = [
-  { seg: '', label: 'Acasă' },
-  { seg: 'tasks', label: 'Sarcini' },
-  { seg: 'keywords', label: 'Cuvinte cheie' },
-  { seg: 'competitors', label: 'Competitori' },
+  { seg: '', label: 'Autopilot' },
+  { seg: 'tasks', label: 'Aprobări' },
+  { seg: 'content', label: 'Conținut' },
+  { seg: 'keywords', label: 'Analiză', alias: ['competitors'] },
   { seg: 'settings', label: 'Setări' },
 ] as const;
 
@@ -33,7 +33,8 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
       <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-[var(--border)]">
         {TABS.map((t) => {
           const href = t.seg ? `${base}/${t.seg}` : base;
-          const active = current === t.seg;
+          const aliases = 'alias' in t ? (t.alias as readonly string[]) : [];
+          const active = current === t.seg || aliases.includes(current);
           return (
             <Link
               key={t.seg}

@@ -112,16 +112,30 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Epics 0-20 implementate — audit (0-12) + modul Strategie (13-19) + redesign UX „pilot automat" (20).
+Epics 0-21 implementate — audit (0-12) + Strategie (13-19) + redesign UX (20) + „Autopilot" (21).
 
-**UI (Epic 20):** flux unificat per site sub `apps/web/app/(app)/sites/[siteId]/` cu layout de tab-uri
-(`layout.tsx`): **Acasă** (`page.tsx`) · **Sarcini** (`tasks/`) · **Cuvinte cheie** (`keywords/`) ·
-**Competitori** (`competitors/`) · **Setări** (`settings/`). `strategy/` redirecționează la `keywords/`.
-Două endpoint-uri noi compun ecranele: `GET /api/sites/:id/home` (scor + istoric + gamificare derivată +
-KPI + trafic + feed „ce s-a schimbat") și `GET /api/sites/:id/tasks` (listă unificată: fix-uri audit
-grupate pe `rule_id` + oportunități keyword + `roadmap_items`) — `apps/api/src/routes/home.ts`.
+**UI (Epic 21):** model de agent, tab-uri per site sub `apps/web/app/(app)/sites/[siteId]/`
+(`layout.tsx`): **Autopilot** (`page.tsx` — casetă de comandă, 2 gauge Sănătate + Vizibilitate AI,
+„ce se întâmplă acum", coadă de aprobare, semnale) · **Aprobări** (`tasks/`) · **Conținut**
+(`content/`) · **Analiză** (`keywords/` + `competitors/`) · **Setări** (`settings/`).
+`GET /api/sites/:id/home` întoarce `score` + `aiVisibility` (categoria `geo` promovată) + `signals[]`;
+`GET /api/sites/:id/signals`, `GET /api/sites/:id/tasks` (`apps/api/src/routes/home.ts`).
+
+**Conținut fără API plătit** (`apps/api/src/routes/content.ts`): aplicația asamblează un *prompt* din
+brief + profil + H2 competitori (`content_drafts.prompt_text`), utilizatorul îl rulează în Claude-ul
+lui, lipește articolul (`article_md`), iar `POST /content/:id/publish` îl pune pe WordPress **ca draft**
+(`wordpress.createDraftPost`, niciodată `status:'publish'`). `shared/mdToHtml` face conversia.
+
+**GA4** (`connectors/ga4.ts` + `routes/analytics.ts`): OAuth reuse (scope `analytics.readonly`),
+`/api/sites/:id/ga/connect` + `/api/sites/ga/callback`. **GBP** (`connectors/gbp.ts`): schelet în
+spatele `FEATURE_GBP=off` (API-ul cere aprobare Google).
+
+Reguli GEO noi: `geo.answer-ready`, `geo.tldr`, `onpage.localbusiness-schema`.
+
+**UI (Epic 20, înlocuit parțial de 21):** flux unificat per site; `GET /api/sites/:id/tasks` (listă
+unificată: fix-uri audit grupate pe `rule_id` + oportunități keyword + `roadmap_items`).
 Design system: token-uri CSS în `apps/web/app/globals.css`, componente în `components/ui.tsx`
-(`Gauge`, `ProgressBar`, `Stat`, `Chip`, `Sheet`, `levelFromPoints`…) + `components/TaskCard.tsx`.
+(`Gauge`, `ProgressBar`, `Stat`, `Chip`, `Sheet`…) + `components/TaskCard.tsx`.
 
 Epics 0-19 implementate — audit complet (0-12) + modul Strategie de keywords & competitori (13-19).
 Verificat end-to-end pe Supabase real: pipeline audit `crawl→enrich→score→recommend→estimate` și

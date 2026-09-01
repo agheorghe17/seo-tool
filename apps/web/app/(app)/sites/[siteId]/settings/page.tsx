@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
+  useConnectGa,
   useConnectGsc,
   useConnectWordpress,
   useSite,
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const verify = useVerifySite(siteId);
   const startCrawl = useStartCrawl(siteId);
   const connectGsc = useConnectGsc(siteId);
+  const connectGa = useConnectGa(siteId);
   const rebuild = useRebuildStrategy(siteId);
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
@@ -145,6 +147,45 @@ export default function SettingsPage() {
               : (connectGsc.error as Error).message}
           </p>
         )}
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionTitle>Google Analytics 4</SectionTitle>
+          <div className="flex items-center gap-2">
+            {site.ga4Property && <Badge tone="good">conectat</Badge>}
+            <Button size="sm" variant="ghost" onClick={() => connectGa.mutate()}>
+              {site.ga4Property ? 'Reconectează' : 'Conectează'}
+            </Button>
+          </div>
+        </div>
+        <p className="text-sm text-[var(--text-muted)]">
+          Trafic real din analytics: sesiuni organice ca bază pentru estimare (crește încrederea) și
+          un panou cu traficul real.
+        </p>
+        {connectGa.isError && (
+          <p className="mt-2 text-sm text-[var(--warn)]">{(connectGa.error as Error).message}</p>
+        )}
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionTitle>Google Business Profile</SectionTitle>
+          <Badge tone="neutral">necesită aprobare Google</Badge>
+        </div>
+        <p className="text-sm text-[var(--text-muted)]">
+          Datele din Business Profile (apeluri, direcții, vizualizări) cer o cerere de acces API
+          aprobată de Google.{' '}
+          <a
+            href="https://developers.google.com/my-business/content/prereqs"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--accent-text)] underline"
+          >
+            Trimite cererea
+          </a>
+          . Până atunci, adăugăm schema LocalBusiness ca sarcină în Aprobări.
+        </p>
       </Card>
 
       <ProfileCard siteId={siteId} />

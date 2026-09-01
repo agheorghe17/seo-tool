@@ -22,6 +22,21 @@ export interface HomeTask {
   bucket?: string;
 }
 
+export interface Signal {
+  type:
+    | 'rank_up'
+    | 'rank_down'
+    | 'refresh_needed'
+    | 'competitor_move'
+    | 'answer_gap'
+    | 'content_ready';
+  tone: 'good' | 'bad' | 'neutral';
+  text: string;
+  href: string;
+}
+
+type ScorePoint = { crawlId: string; at: string; total: number | null };
+
 export interface HomeData {
   site: {
     domain: string;
@@ -34,8 +49,13 @@ export interface HomeData {
   score: {
     total: number | null;
     delta: number | null;
-    history: { crawlId: string; at: string; total: number | null }[];
+    history: ScorePoint[];
     categories: Record<string, number | null>;
+  };
+  aiVisibility: {
+    score: number | null;
+    delta: number | null;
+    history: ScorePoint[];
   };
   crawl: { id: string; status: string; pagesScanned: number; at: string } | null;
   gamification: {
@@ -61,7 +81,7 @@ export interface HomeData {
     baselineSource: 'gsc' | 'keyword_model';
     assumptions: string[];
   } | null;
-  changes: { text: string; tone: 'good' | 'bad' | 'neutral' }[];
+  signals: Signal[];
   strategyReady: boolean;
 }
 
@@ -77,6 +97,18 @@ export function useHome(siteId: string) {
       apiFetch<{ home: HomeData }>(`/api/sites/${siteId}/home`, { token }).then((r) => r.home),
     enabled: !!token,
     refetchInterval: 15000,
+  });
+}
+
+export function useSignals(siteId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['signals', siteId],
+    queryFn: () =>
+      apiFetch<{ signals: Signal[] }>(`/api/sites/${siteId}/signals`, { token }).then(
+        (r) => r.signals,
+      ),
+    enabled: !!token,
   });
 }
 

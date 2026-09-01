@@ -118,10 +118,48 @@ export const headingHierarchyRule: Rule = {
   },
 };
 
+const LOCAL_SCHEMA = /^(LocalBusiness|Organization|Store|Restaurant|MedicalBusiness|ProfessionalService|Dentist|Attorney|HomeAndConstructionBusiness)$/;
+
+function looksLikeContactPage(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase().replace(/\/+$/, '');
+    return path === '' || /\/(contact|despre|about|echipa|team)$/.test(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Epic 21 (local SEO) — the homepage / contact page should carry LocalBusiness or
+ * Organization JSON-LD so search engines and map results have your name, address, phone.
+ */
+export const localBusinessSchemaRule: Rule = {
+  id: 'onpage.localbusiness-schema',
+  version: 1,
+  category: 'geo',
+  severity: 'info',
+  fixTitle: 'Adaugă schema LocalBusiness / Organization cu nume, adresă și telefon',
+  impactHint: 3,
+  effortHint: 2,
+  penalty: 18,
+  check(page) {
+    if (!looksLikeContactPage(page.url)) return { passed: true };
+    const has = page.schemaTypes.some((t) => LOCAL_SCHEMA.test(t));
+    return has
+      ? { passed: true }
+      : {
+          passed: false,
+          description: 'Pagina de prezentare/contact nu are schema LocalBusiness sau Organization.',
+          detectedValue: page.schemaTypes.join(', ') || null,
+        };
+  },
+};
+
 export const onpageRules: Rule[] = [
   titleLengthRule,
   metaDescriptionRule,
   singleH1Rule,
   imageAltRule,
   headingHierarchyRule,
+  localBusinessSchemaRule,
 ];

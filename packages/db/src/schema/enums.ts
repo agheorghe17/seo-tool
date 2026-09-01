@@ -24,7 +24,12 @@ export const scoreCategoryEnum = pgEnum('score_category', [
   'geo',
 ]);
 export const severityEnum = pgEnum('severity', ['critical', 'warning', 'info']);
-export const secretKindEnum = pgEnum('secret_kind', ['wp_app_password', 'gsc_refresh_token']);
+export const secretKindEnum = pgEnum('secret_kind', [
+  'wp_app_password',
+  'gsc_refresh_token',
+  'ga4_refresh_token',
+  'gbp_refresh_token',
+]);
 export const llmProviderEnum = pgEnum('llm_provider', ['anthropic', 'ollama', 'none']);
 export const keywordSourceEnum = pgEnum('keyword_source', ['gsc', 'dataforseo']);
 export const baselineSourceEnum = pgEnum('baseline_source', ['gsc', 'keyword_model']);
@@ -56,3 +61,12 @@ export const expansionSourceEnum = pgEnum('expansion_source', [
 export const rankSourceEnum = pgEnum('rank_source', ['gsc', 'serp']);
 export const competitorAddedByEnum = pgEnum('competitor_added_by', ['user', 'auto']);
 export const roadmapStatusEnum = pgEnum('roadmap_status', ['todo', 'doing', 'done', 'skipped']);
+
+// --- Autopilot (Epic 21) ---
+export const contentStatusEnum = pgEnum('content_status', [
+  'idea',
+  'prompt_ready',
+  'review',
+  'published',
+  'discarded',
+]);

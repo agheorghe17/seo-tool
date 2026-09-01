@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   useAddCompetitor,
@@ -23,12 +24,21 @@ export default function CompetitorsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Competitori</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Analiză</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Adaugă domenii cu care te compari. Le analizăm{' '}
           <SeoTermTooltip term="content gap">crawlându-le site-ul</SeoTermTooltip> — fără niciun
           serviciu plătit.
         </p>
+        <div className="mt-3 flex gap-4 text-sm">
+          <Link
+            href={`/sites/${siteId}/keywords`}
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
+          >
+            Cuvinte cheie
+          </Link>
+          <span className="font-medium text-[var(--text)]">Competitori</span>
+        </div>
       </div>
 
       <Card>

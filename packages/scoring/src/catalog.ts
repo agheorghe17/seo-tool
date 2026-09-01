@@ -115,6 +115,19 @@ const STEPS: Record<string, string[]> = {
     'Împarte conținutul lung în secțiuni cu subtitluri H2/H3 descriptive.',
     'Pune un răspuns direct în primele 1-2 propoziții ale fiecărei secțiuni.',
   ],
+  'geo.answer-ready': [
+    'Grupează întrebările frecvente într-o secțiune și marchează-le cu schema `FAQPage`.',
+    'Ține fiecare răspuns scurt (2-4 propoziții) și pune-l imediat după întrebare.',
+    'Validează cu Rich Results Test.',
+  ],
+  'geo.tldr': [
+    'Adaugă în partea de sus a paginii un bloc scurt „Pe scurt" (2-4 propoziții) care rezumă răspunsul.',
+    'Folosește un subtitlu clar („Pe scurt", „Rezumat") ca motoarele AI să-l poată extrage.',
+  ],
+  'onpage.localbusiness-schema': [
+    'Adaugă JSON-LD `LocalBusiness` (sau `Organization`) cu `name`, `address`, `telephone`, `url`.',
+    'Pune-l pe homepage și pe pagina de contact; ține datele identice cu cele din Google Business Profile.',
+  ],
   'technical.needs-ssr': [
     'Servește conținutul principal în HTML-ul inițial (SSR sau prerender).',
     'Verifică ce vede Googlebot cu testul de randare din Search Console.',

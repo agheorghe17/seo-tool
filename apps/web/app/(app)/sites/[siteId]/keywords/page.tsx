@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   useKeywords,
@@ -64,10 +65,19 @@ export default function KeywordsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Cuvinte cheie</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Analiză</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Pe ce te găsesc oamenii în Google și pe ce ai putea să apari.
         </p>
+        <div className="mt-3 flex gap-4 text-sm">
+          <span className="font-medium text-[var(--text)]">Cuvinte cheie</span>
+          <Link
+            href={`/sites/${siteId}/competitors`}
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
+          >
+            Competitori
+          </Link>
+        </div>
       </div>
 
       {overview.data && (
