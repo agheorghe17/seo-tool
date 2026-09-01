@@ -133,7 +133,7 @@ export default function SitePage() {
           </div>
         </div>
         <p className="mt-1 text-sm text-neutral-500">
-          Conectat = poziții reale, „câștiguri rapide" și istoric în Strategie, plus baseline de
+          Conectat = poziții reale, câștiguri rapide și istoric în Strategie, plus baseline de
           trafic pentru estimare.
         </p>
         {connectGsc.isError && (
