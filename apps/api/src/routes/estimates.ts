@@ -48,14 +48,31 @@ export async function estimateRoutes(app: FastifyInstance): Promise<void> {
           });
 
         const [site] = await db.select().from(sites).where(eq(sites.id, siteId));
+
+        // Discover the property this account actually has (Domain vs URL-prefix).
+        let property = site?.gscProperty ?? null;
+        try {
+          const siteList = await gsc.listSites(tokens.accessToken);
+          const picked = gsc.pickProperty(site?.domain ?? '', siteList);
+          if (picked) property = picked;
+          req.log.info(
+            { siteId, properties: siteList.map((s) => s.siteUrl), picked },
+            'gsc property discovery',
+          );
+        } catch (err) {
+          req.log.warn({ err, siteId }, 'gsc sites.list failed');
+        }
+        if (!property) property = `sc-domain:${site?.domain}`;
+
         await db
           .update(sites)
-          .set({ gscConnected: true, gscProperty: site?.gscProperty ?? `sc-domain:${site?.domain}` })
+          .set({ gscConnected: true, gscProperty: property })
           .where(eq(sites.id, siteId));
 
-        await recordAudit(null, 'site.gsc.connect', siteId);
+        await recordAudit(null, 'site.gsc.connect', siteId, { property });
         return reply.redirect(`${web}/sites/${siteId}?gsc=connected`);
-      } catch {
+      } catch (err) {
+        req.log.error({ err, siteId }, 'gsc callback failed');
         return reply.redirect(`${web}/sites/${siteId}?gsc=error`);
       }
     },

@@ -95,6 +95,42 @@ export async function refreshAccessToken(
   return json.access_token;
 }
 
+export interface GscSite {
+  siteUrl: string;
+  permissionLevel: string;
+}
+
+/** List the Search Console properties this token can read. */
+export async function listSites(
+  accessToken: string,
+  deps: { fetchImpl?: typeof fetch } = {},
+): Promise<GscSite[]> {
+  const doFetch = deps.fetchImpl ?? fetch;
+  const res = await doFetch(`${SC_ENDPOINT}/sites`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`sites.list failed: ${res.status}`);
+  const json = (await res.json()) as { siteEntry?: GscSite[] };
+  return json.siteEntry ?? [];
+}
+
+/**
+ * Pick the best property for a domain from the user's list.
+ * Prefers `sc-domain:example.com`, then `https://example.com/`, then any URL that contains the host.
+ */
+export function pickProperty(domain: string, siteList: GscSite[]): string | null {
+  const host = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '').toLowerCase();
+  const usable = siteList.filter((s) => s.permissionLevel !== 'siteUnverifiedUser');
+  const scDomain = usable.find((s) => s.siteUrl === `sc-domain:${host}`);
+  if (scDomain) return scDomain.siteUrl;
+  const httpsRoot = usable.find(
+    (s) => s.siteUrl === `https://${host}/` || s.siteUrl === `https://www.${host}/`,
+  );
+  if (httpsRoot) return httpsRoot.siteUrl;
+  const anyMatch = usable.find((s) => s.siteUrl.toLowerCase().includes(host));
+  return anyMatch?.siteUrl ?? null;
+}
+
 export interface GscRow {
   keys: string[];
   clicks: number;
