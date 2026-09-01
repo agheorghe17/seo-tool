@@ -125,16 +125,16 @@ export default function SitePage() {
       <Card>
         <div className="flex items-center justify-between">
           <h2 className="font-medium">Google Search Console</h2>
-          {site.gscConnected ? (
-            <Badge tone="good">conectat</Badge>
-          ) : (
+          <div className="flex items-center gap-2">
+            {site.gscConnected && <Badge tone="good">conectat</Badge>}
             <Button variant="ghost" onClick={() => connectGsc.mutate(undefined)}>
-              Conectează
+              {site.gscConnected ? 'Reconectează' : 'Conectează'}
             </Button>
-          )}
+          </div>
         </div>
         <p className="mt-1 text-sm text-neutral-500">
-          Conectat = baseline de trafic din date reale și încredere mai mare a estimării.
+          Conectat = poziții reale, „câștiguri rapide" și istoric în Strategie, plus baseline de
+          trafic pentru estimare.
         </p>
         {connectGsc.isError && (
           <p className="mt-2 text-sm text-amber-600">
