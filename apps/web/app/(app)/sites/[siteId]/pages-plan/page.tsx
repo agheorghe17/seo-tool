@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { AnalysisNav } from '@/components/AnalysisNav';
 import {
   useApplyBlueprint,
   useBlueprintPrompt,
@@ -21,20 +21,6 @@ const DIAG: Record<Blueprint['diagnosis'], { label: string; tone: 'good' | 'warn
   orphan_page: { label: 'fără legătură', tone: 'critical' },
   no_target: { label: 'fără cuvânt țintă', tone: 'critical' },
 };
-
-function SubNav({ siteId }: { siteId: string }) {
-  return (
-    <div className="mt-3 flex gap-4 text-sm">
-      <Link href={`/sites/${siteId}/keywords`} className="text-[var(--text-muted)] hover:text-[var(--text)]">
-        Cuvinte cheie
-      </Link>
-      <Link href={`/sites/${siteId}/competitors`} className="text-[var(--text-muted)] hover:text-[var(--text)]">
-        Competitori
-      </Link>
-      <span className="font-medium text-[var(--text)]">Pagini</span>
-    </div>
-  );
-}
 
 export default function PagesPlanPage() {
   const siteId = useParams().siteId as string;
@@ -56,12 +42,42 @@ export default function PagesPlanPage() {
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             Ce cuvânt ar trebui să țintească fiecare pagină și cum s-o refaci.
           </p>
-          <SubNav siteId={siteId} />
+          <AnalysisNav siteId={siteId} active="pages-plan" />
         </div>
-        <Button variant="ghost" onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
-          {rebuild.isPending ? 'Se reface…' : 'Reface planul'}
+        <Button variant="ghost" loading={rebuild.isPending} onClick={() => rebuild.mutate()}>
+          Reface planul
         </Button>
       </div>
+
+      {data && data.cannibalizationGroups && data.cannibalizationGroups.length > 0 && (
+        <Card>
+          <div className="text-sm font-medium">Canibalizare — pagini care se concurează</div>
+          <div className="mt-2 space-y-3">
+            {data.cannibalizationGroups.map((g, i) => (
+              <div key={i} className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3 text-sm">
+                <div>
+                  Pentru „{g.keyword}” păstrează <strong>{pathOf(g.canonicalUrl)}</strong>.
+                </div>
+                <ul className="mt-1 list-disc pl-5 text-xs text-[var(--text-muted)]">
+                  {g.mergeInstructions.map((m, j) => (
+                    <li key={j}>{m}</li>
+                  ))}
+                </ul>
+                <button
+                  className="mt-2 text-xs text-[var(--accent-text)] underline"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(
+                      g.redirects.map((r) => `${r.from}  ->  ${r.to}  (301)`).join('\n'),
+                    )
+                  }
+                >
+                  Copiază lista de redirect-uri 301
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {data?.market && (data.market.primaryCity || data.market.geoCountry) && (
         <p className="text-xs text-[var(--text-faint)]">

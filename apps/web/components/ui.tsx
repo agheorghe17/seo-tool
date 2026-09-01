@@ -108,10 +108,20 @@ export function Chip({
 
 /* ---- Button ----------------------------------------------------------------- */
 
+export function Spinner({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent ${className}`}
+      aria-hidden
+    />
+  );
+}
+
 export function Button({
   children,
   onClick,
   disabled,
+  loading,
   variant = 'primary',
   size = 'md',
   type = 'button',
@@ -120,6 +130,7 @@ export function Button({
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  loading?: boolean;
   variant?: 'primary' | 'ghost' | 'danger' | 'subtle';
   size?: 'sm' | 'md';
   type?: 'button' | 'submit';
@@ -137,9 +148,11 @@ export function Button({
     <button
       type={type}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
+      aria-busy={loading}
       className={`inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${pad} ${styles} ${className}`}
     >
+      {loading && <Spinner />}
       {children}
     </button>
   );

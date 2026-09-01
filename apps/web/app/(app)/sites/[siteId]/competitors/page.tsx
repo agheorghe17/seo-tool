@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   useAddCompetitor,
@@ -11,6 +10,7 @@ import {
 } from '@/lib/strategy';
 import { Badge, Button, Card, EmptyState, Skeleton } from '@/components/ui';
 import { SeoTermTooltip } from '@/components/strategy/SeoTermTooltip';
+import { AnalysisNav } from '@/components/AnalysisNav';
 
 export default function CompetitorsPage() {
   const siteId = useParams().siteId as string;
@@ -30,21 +30,7 @@ export default function CompetitorsPage() {
           <SeoTermTooltip term="content gap">crawlându-le site-ul</SeoTermTooltip> — fără niciun
           serviciu plătit.
         </p>
-        <div className="mt-3 flex gap-4 text-sm">
-          <Link
-            href={`/sites/${siteId}/keywords`}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-          >
-            Cuvinte cheie
-          </Link>
-          <span className="font-medium text-[var(--text)]">Competitori</span>
-          <Link
-            href={`/sites/${siteId}/pages-plan`}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-          >
-            Pagini
-          </Link>
-        </div>
+        <AnalysisNav siteId={siteId} active="competitors" />
       </div>
 
       <Card>

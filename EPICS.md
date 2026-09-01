@@ -399,3 +399,39 @@ Totul config-driven din `business_profiles` (piață/geo/oraș) — nimic hardco
   pe salesup.ro → 14 blueprint-uri (homepage țintă „agentie google ads bucuresti" + schema LocalBusiness,
   5 canibalizări detectate), `/plan` întoarce `phases` + `market`. Test de reutilizare: profil nou pe
   alt domeniu/altă piață → zero referințe hardcodate la nișă în cod (doar din profil).
+
+## Epic 23 — „Motor de rezultate" (features gratuite) + refresh de design + feedback UX
+
+Toate pe GSC + crawl, fără API plătit. Plus un strat transversal de feedback (toast + spinner +
+strip de pipeline) și un refresh de sistem de design (token-uri + `ui.tsx`, se propagă).
+
+- [x] **23.1** Feedback UX — `lib/toast.ts` (store minimal) + `components/Toaster.tsx` montat în
+  `providers.tsx`; erori automate pe toate mutațiile (`QueryClient.mutations.onError`); `Button`
+  primește `loading` (spinner); `job_runs` +`site_id`, `GET /api/sites/:id/pipeline` +
+  `<PipelineStrip>` pe Autopilot (poll 3 s, arată `scan ✓ · cuvinte cheie ⏳ · …` + `failed` + eroarea)
+- [x] **23.2** Refresh de design — `globals.css` (paletă mai fină, raze, tipografie) + `ui.tsx`
+  (`Spinner`, `Button loading`); sub-nav unificat `<AnalysisNav>` (7 secțiuni sub tab-ul Analiză)
+- [x] **23.3** Crawler — `extract.ts` emite `internalLinks:{url,anchor}[]` + `mainText` (8 KB);
+  `pages` +`internal_links jsonb` +`main_text text` (mig. `0006`)
+- [x] **23.4** Bucla de verificare — tabel `interventions` + helper `recordIntervention` apelat din
+  toate aplicările (blueprint / reco / content / roadmap / link intern); job `intervention-check`
+  (săptămânal) măsoară după 14 zile + actualizează `impact_calibration`; `estimate` citește
+  calibrarea (`categoryCalibration`, ±50%, `sampleN ≥ 5`). Ecran „Ce a funcționat" (`rezultate/`).
+- [x] **23.5** Forecast + backtest — `estimator.backtestEstimate` (pur, testat) + `traffic_estimates.
+  backtest_json`; se afișează pe cardul „Proiecție" din Autopilot
+- [x] **23.6** Content decay — job `traffic-history` (12 luni GSC `page×date` → `page_traffic_history`);
+  `strategy.detectDecay` (pur, testat); ecran „Declin" (`declin/`) cu brief de refresh
+- [x] **23.7** Linkuri interne — `strategy.auditInternalLinks` (pur, testat): orfane, sub-linkate,
+  „menționezi fără link", goluri de cluster, plan concret; `GET /api/sites/:id/internal-links` +
+  `POST .../done` (→ `interventions`); ecran „Linkuri interne" (`linkuri/`). Fără auto-apply pe WP.
+- [x] **23.8** Canibalizare — `strategy.resolveCannibalization` (pur, testat) → canonic + hartă 301 +
+  pași de merge; în `GET /plan` ca `cannibalizationGroups`, afișat în ecranul „Pagini"
+- [x] **23.9** Arhitectură — `strategy.recommendArchitecture` (pur, testat): piloni / suport / grupuri
+  orfane + acoperire; `GET /api/sites/:id/architecture` + ecran „Structură" (`structura/`)
+- [x] **23.10** Portofoliu — `GET /api/portfolio` (scor, vizibilitate AI, sarcini, interventions
+  pending, declin, „needs attention" per site); `sites/page.tsx` redesenat ca dashboard
+- [x] **23.11** Execuție ghidată — `POST /api/sites/:id/verify-step` (re-ia pagina, verifică un
+  predicat: title/H1/meta/link/schema)
+- **Gata când:** type-check 12/12, lint curat, `web build` OK (22 rute), 130 teste; verificat pe
+  salesup.ro: `/pipeline` arată lanțul live, `/decay` 3 pagini în declin, `/internal-links` 3
+  oportunități de ancoră după re-crawl, `/portfolio` populat. Migrație `0006` aplicată.

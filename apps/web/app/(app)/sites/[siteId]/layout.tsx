@@ -9,7 +9,11 @@ const TABS = [
   { seg: '', label: 'Autopilot' },
   { seg: 'tasks', label: 'Aprobări' },
   { seg: 'content', label: 'Conținut' },
-  { seg: 'keywords', label: 'Analiză', alias: ['competitors', 'pages-plan'] },
+  {
+    seg: 'keywords',
+    label: 'Analiză',
+    alias: ['competitors', 'pages-plan', 'structura', 'linkuri', 'declin', 'rezultate'],
+  },
   { seg: 'settings', label: 'Setări' },
 ] as const;
 

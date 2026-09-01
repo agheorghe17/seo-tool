@@ -545,6 +545,7 @@ export async function homeRoutes(app: FastifyInstance): Promise<void> {
               assumptions: est.assumptions,
               baselineMonthlyVisits: est.baselineMonthlyVisits,
               phases: est.phases ?? [],
+              backtest: est.backtest ?? null,
             }
           : null,
         signals: signals.slice(0, 6),

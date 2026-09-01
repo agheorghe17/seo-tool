@@ -112,7 +112,19 @@ Copiază `.env.example` → `.env` la rădăcină. Câmpuri esențiale pentru de
 
 ## Status
 
-Epics 0-22 implementate — audit (0-12) + Strategie (13-19) + UX (20) + „Autopilot" (21) + „Blueprint de pagină" (22).
+Epics 0-23 implementate — audit (0-12) + Strategie (13-19) + UX (20) + „Autopilot" (21) +
+„Blueprint de pagină" (22) + „Motor de rezultate" (23).
+
+**Motor de rezultate (Epic 23):** bucla de verificare (`interventions` + `recordIntervention` din
+toate aplicările → job `intervention-check` săptămânal → `impact_calibration` citită de `estimate`);
+`estimator.backtestEstimate` + `traffic_estimates.backtest_json`; job `traffic-history`
+(`page_traffic_history`) + `strategy.detectDecay`; `strategy.auditInternalLinks` (crawler-ul capturează
+acum `pages.internal_links` + `main_text`); `strategy.resolveCannibalization` (în `/plan`);
+`strategy.recommendArchitecture`; `GET /api/portfolio` (dashboard agenție); `POST /verify-step`.
+Feedback UX: `lib/toast.ts` + `<Toaster>` (montat în `providers.tsx`), `Button loading`,
+`job_runs.site_id` + `<PipelineStrip>` (`GET /api/sites/:id/pipeline`). Ecrane noi sub tab-ul
+Analiză (`<AnalysisNav>`): `structura/` · `linkuri/` · `declin/` · `rezultate/`. Rute API în
+`apps/api/src/routes/insights.ts`. Design refresh: token-uri în `globals.css` + `ui.tsx`.
 
 **Blueprint de pagină (Epic 22):** `page-plan` job (`apps/worker/src/jobs/page-plan.ts`) → tabel
 `page_blueprints`: pentru fiecare pagină, cuvântul țintă (`strategy/page-target.ts` `assignPageTargets`,

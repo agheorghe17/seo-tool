@@ -26,7 +26,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { recordIntervention } from '../lib/interventions.js';
 
-const UA = process.env.CRAWLER_UA ?? 'SEO-Audit-Bot/1.0 (+verify)';
+const UA = process.env.CRAWL_USER_AGENT ?? 'SeoToolBot/0.1 (+verify)';
 
 async function ownedSite(userId: string, siteId: string) {
   const [row] = await db
@@ -201,6 +201,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
     const latest = new Map<string, (typeof rows)[number]>();
     for (const r of rows) if (!latest.has(r.type)) latest.set(r.type, r);
     const order = [
+      'crawl',
       'profile-extract',
       'keyword-research',
       'rank-import',

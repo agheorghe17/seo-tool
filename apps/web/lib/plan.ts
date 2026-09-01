@@ -59,8 +59,16 @@ export interface PlanProjection {
   assumptions: string[];
 }
 
+export interface CannibalizationGroup {
+  keyword: string;
+  canonicalUrl: string;
+  redirects: { from: string; to: string }[];
+  mergeInstructions: string[];
+}
+
 export interface PlanResponse {
   blueprints: Blueprint[];
+  cannibalizationGroups: CannibalizationGroup[];
   market: {
     geoCountry: string | null;
     geoLanguage: string | null;

@@ -17,6 +17,8 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { TaskCard } from '@/components/TaskCard';
+import { PipelineStrip } from '@/components/PipelineStrip';
+import { pushToast } from '@/lib/toast';
 import type { HomeTask } from '@/lib/home';
 
 function Spark({ points }: { points: (number | null)[] }) {
@@ -178,13 +180,34 @@ export default function AutopilotPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
-              {rebuild.isPending ? 'Se reface…' : 'Reface strategia'}
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={rebuild.isPending}
+              onClick={() =>
+                rebuild.mutate(undefined, {
+                  onSuccess: () => pushToast('Strategia se reface în fundal.', 'success'),
+                })
+              }
+            >
+              Reface strategia
             </Button>
-            <Button size="sm" onClick={() => startCrawl.mutate()} disabled={startCrawl.isPending || crawlRunning}>
+            <Button
+              size="sm"
+              loading={startCrawl.isPending}
+              disabled={crawlRunning}
+              onClick={() =>
+                startCrawl.mutate(undefined, {
+                  onSuccess: () => pushToast('Scan pornit.', 'success'),
+                })
+              }
+            >
               {crawlRunning ? 'Scan în curs…' : 'Scanează din nou'}
             </Button>
           </div>
+        </div>
+        <div className="mt-3">
+          <PipelineStrip siteId={siteId} />
         </div>
       </Card>
 
@@ -347,8 +370,21 @@ function Projection({ traffic }: { traffic: import('@/lib/home').HomeData['traff
     180: 'La 6 luni',
   };
   const max = Math.max(...traffic.phases.map((p) => p.high));
+  const bt = traffic.backtest;
   return (
     <Card>
+      {bt && (
+        <div
+          className={`mb-3 rounded-[var(--radius-sm)] border p-2 text-xs ${
+            bt.withinBand
+              ? 'border-[var(--good)] text-[var(--good)]'
+              : 'border-[var(--warn)] text-[var(--warn)]'
+          }`}
+        >
+          Proiecția de acum {bt.agoDays} de zile a estimat {fmt(bt.projectedLow)}–{fmt(bt.projectedHigh)}
+          /lună. Real acum: {fmt(bt.actual)}. {bt.withinBand ? '✓ în interval.' : 'în afara intervalului.'}
+        </div>
+      )}
       <div className="mb-2 flex items-baseline justify-between text-xs text-[var(--text-muted)]">
         <span>Acum: ~{fmt(traffic.baselineMonthlyVisits)} vizite/lună</span>
         <span>

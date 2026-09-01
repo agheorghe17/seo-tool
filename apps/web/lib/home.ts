@@ -82,6 +82,13 @@ export interface HomeData {
     assumptions: string[];
     baselineMonthlyVisits: number;
     phases: { days: number; low: number; mid: number; high: number }[];
+    backtest?: {
+      projectedLow: number;
+      projectedHigh: number;
+      actual: number;
+      withinBand: boolean;
+      agoDays: number;
+    } | null;
   } | null;
   signals: Signal[];
   strategyReady: boolean;
@@ -111,6 +118,26 @@ export function useSignals(siteId: string) {
         (r) => r.signals,
       ),
     enabled: !!token,
+  });
+}
+
+export interface PipelineStep {
+  type: string;
+  status: 'running' | 'ok' | 'failed';
+  error: string | null;
+  at: string;
+}
+
+export function usePipeline(siteId: string, poll = false) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['pipeline', siteId],
+    queryFn: () =>
+      apiFetch<{ steps: PipelineStep[]; running: boolean }>(`/api/sites/${siteId}/pipeline`, {
+        token,
+      }),
+    enabled: !!token,
+    refetchInterval: poll ? 3000 : false,
   });
 }
 

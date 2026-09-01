@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   useKeywords,
@@ -21,6 +20,7 @@ import {
 import { ProfileWizard } from '@/components/strategy/ProfileWizard';
 import { KeywordDetail } from '@/components/strategy/KeywordDetail';
 import { SeoTermTooltip } from '@/components/strategy/SeoTermTooltip';
+import { AnalysisNav } from '@/components/AnalysisNav';
 
 const RANK_FILTERS = [
   { id: '', label: 'Toate' },
@@ -69,21 +69,7 @@ export default function KeywordsPage() {
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Pe ce te găsesc oamenii în Google și pe ce ai putea să apari.
         </p>
-        <div className="mt-3 flex gap-4 text-sm">
-          <span className="font-medium text-[var(--text)]">Cuvinte cheie</span>
-          <Link
-            href={`/sites/${siteId}/competitors`}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-          >
-            Competitori
-          </Link>
-          <Link
-            href={`/sites/${siteId}/pages-plan`}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-          >
-            Pagini
-          </Link>
-        </div>
+        <AnalysisNav siteId={siteId} active="keywords" />
       </div>
 
       {overview.data && (
