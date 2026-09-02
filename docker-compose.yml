@@ -1,0 +1,47 @@
+# seo-tool — api + worker + Caddy (HTTPS) on one always-free VM.
+# The web app (apps/web) is NOT here — it goes on Vercel. See DEPLOY.md.
+#
+#   cp .env.example .env   &&   edit .env   (server-side vars only — see DEPLOY.md)
+#   export API_HOST=<your-vm-ip>.sslip.io   (or a real domain that A-records to the VM)
+#   docker compose up -d --build
+
+services:
+  api:
+    build: .
+    command: pnpm --filter api start
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      API_PORT: "3001"
+    expose:
+      - "3001"
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: pnpm --filter worker start
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_HOST: ${API_HOST:?set API_HOST, e.g. 1.2.3.4.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,19 @@
+name: keepalive
+
+# Supabase free pauses a project after 7 days with no activity. A daily read keeps it warm.
+# Repo secrets needed: SUPABASE_URL, SUPABASE_ANON_KEY  (Settings → Secrets and variables → Actions)
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # 06:17 UTC daily
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Touch Supabase
+        run: |
+          curl -sf \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/?apikey=${{ secrets.SUPABASE_ANON_KEY }}" \
+            -o /dev/null && echo "supabase alive" || (echo "supabase ping failed" && exit 1)

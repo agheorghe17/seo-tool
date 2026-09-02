@@ -1,0 +1,11 @@
+# Auto-HTTPS reverse proxy for the API. Caddy fetches a real Let's Encrypt cert for
+# whatever hostname API_HOST resolves to (a *.sslip.io / *.nip.io wildcard host that
+# maps to the VM IP works with zero DNS setup; swap in a real domain any time).
+
+{$API_HOST} {
+	encode zstd gzip
+	reverse_proxy api:3001 {
+		# SSE (crawl progress) needs streaming, not buffering.
+		flush_interval -1
+	}
+}
