@@ -17,7 +17,12 @@ ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau ț
    „garantat", „+X vizite sigur". Doar intervale cu ipoteze.
 3. **Rankezi pe obiectul site-ului și pe serviciile oferite**, nu pe cuvinte cu volum
    mare dar irelevante.
-4. Fără link building. Fără conținut generat automat publicat live (doar draft).
+4. Fără link building. Fără conținut generat automat publicat live (doar draft;
+   utilizatorul verifică și publică din WordPress).
+5. **Scris pentru cineva care nu știe SEO.** Limbaj simplu, în română, fără jargon
+   neexplicat. Fiecare recomandare spune *ce* și *de ce*, concret.
+6. **Explicația citește semnalele reale** — „~V căutări/lună, acum poziția ~P,
+   relevanță R/100" — nu formule circulare de tip „țintește termenul principal X".
 
 ## Cuvântul țintă per pagină
 
@@ -27,13 +32,28 @@ ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau ț
 - **Pagini de serviciu → cuvântul acelui serviciu** (ex. `/google-ads` → „servicii
   google ads"), cel mai relevant și cu intenție comercială.
 - **Pagini legale / utilitare** (politică de confidențialitate, termeni, cookies,
-  sitemap, coș, cont, arhive tag/autor) → **fără cuvânt țintă, fără blueprint.** Nu
-  sunt menite să rankeze.
-- Un cuvânt cu **relevanță < 30/100** față de servicii NU e o țintă validă.
+  sitemap, coș, cont, autentificare, „mulțumim", arhive tag/autor/paginare) → **fără
+  cuvânt țintă, fără blueprint.** Nu sunt menite să rankeze. Rămân **indexabile** (nu
+  le pune `noindex`) — politica de confidențialitate e obligatorie pe orice site.
+- Un cuvânt cu **relevanță < 30/100** față de servicii NU e o țintă validă. Nu
+  fabrica o țintă slabă dacă nu există o potrivire bună — marchează pagina „fără
+  țintă" / orphan.
 - **Un singur cuvânt principal per pagină.** Dacă două pagini țintesc același cuvânt →
   canibalizare: alege una, reorientează cealaltă.
-- Cuvinte de brand pur („nume firmă", „nume firmă d.o.o") nu sunt ținte — site-ul deja
-  rankează #1 pe numele lui.
+- Cuvinte de brand pur („nume firmă", „nume firmă d.o.o", „nume firmă SRL") nu sunt
+  ținte — site-ul deja rankează #1 pe numele lui.
+- **Varianta locală a cuvântului homepage-ului** („… {oraș}") se folosește doar dacă
+  SEO local e activ **și** există un oraș principal setat.
+
+## Universul de cuvinte cheie (curățenie)
+
+- Expandarea din autocomplete produce zgomot. Un cuvânt care **nu conține niciun
+  token de serviciu sau de seed** și **nu are volum de căutare** = drift, se elimină.
+- **Typo-uri și scrieri greșite** ale brandului/serviciilor (ex. „resselsup" pentru
+  „salesup") → gunoi, se elimină.
+- Sufixe de formă juridică (`d.o.o`, `s.r.l`, `SRL`, `GmbH`, `Ltd`) → se elimină.
+- Volumul se completează din Keyword Planner; când lipsește, potențialul se afișează
+  calitativ („poziție X → Y"), nu se inventează o cifră.
 
 ## Title / H1 / meta
 
@@ -57,6 +77,26 @@ ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau ț
   site-ul a ales „Local — un oraș"** în Setări. O agenție/afacere online națională NU
   primește recomandări de SEO local.
 
+## Estimări de trafic
+
+- **Întotdeauna un interval** (`low`–`high`) cu ipoteze vizibile și nivel de
+  încredere. Niciodată o singură cifră „garantată".
+- **Fără creștere > 2× de la o lună la alta** pentru un site fără istoric/autoritate.
+- Ramp-up: lunile 1–2 mișcare mică (Google reindexează), creștere graduală după.
+- Când traficul organic curent e ~0, proiecția în timp e zgomot → folosește
+  **potențialul bottom-up** (suma pe pagini: volum × CTR la poziția țintă), marcat
+  clar „dacă paginile ajung pe pozițiile țintă".
+- Cu Search Console conectat → încredere „medie/mare"; doar din model de cuvinte →
+  „scăzută".
+
+## Aplicare pe site
+
+- Se scriu automat **doar** meta title / meta description / alt text, **doar** cu
+  confirmare explicită, **doar** pe WordPress conectat, cu valoarea veche salvată
+  pentru rollback.
+- Linkurile interne și redirect-urile 301 rămân **plan**, nu se execută automat.
+- Conținutul se publică **doar ca draft**.
+
 ## Ce semnalează agentul
 
 - Homepage țintind un serviciu în loc de o categorie.
@@ -65,3 +105,5 @@ ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau ț
 - Două pagini pe același cuvânt (canibalizare) nerezolvată.
 - Recomandare de SEO local pe un site setat „național".
 - Orice text care promite o poziție sau o cifră de trafic garantată.
+- Explicație circulară sau cu jargon neexplicat.
+- Estimare care nu e interval, sau creștere nerealistă lună-la-lună.
