@@ -27,7 +27,7 @@ export type Severity = (typeof SEVERITIES)[number];
 export const CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
 export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
 
-export const LLM_PROVIDERS = ['anthropic', 'ollama', 'none'] as const;
+export const LLM_PROVIDERS = ['anthropic', 'ollama', 'gemini', 'none'] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 export const JOB_TYPES = [
@@ -50,6 +50,7 @@ export const JOB_TYPES = [
   'page-plan',
   'traffic-history',
   'intervention-check',
+  'seo-agent',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

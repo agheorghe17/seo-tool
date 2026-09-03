@@ -17,6 +17,7 @@ import { handleStrategyWeekly } from './strategy-weekly.js';
 import { handlePagePlan } from './page-plan.js';
 import { handleTrafficHistory } from './traffic-history.js';
 import { handleInterventionCheck } from './intervention-check.js';
+import { handleSeoAgent } from './seo-agent.js';
 import type { JobPayloads } from './types.js';
 
 /**
@@ -55,6 +56,7 @@ export const handlers: { [K in keyof JobPayloads]: Handler<K> } = {
   'page-plan': (job, boss) => handlePagePlan(job, boss),
   'traffic-history': (job) => handleTrafficHistory(job),
   'intervention-check': (job) => handleInterventionCheck(job),
+  'seo-agent': (job) => handleSeoAgent(job),
 };
 
 /** Per-job-type concurrency (Epic 9.1). Crawls / render are heaviest → keep low. */
@@ -77,4 +79,5 @@ export const concurrency: Record<keyof JobPayloads, number> = {
   'page-plan': 1,
   'traffic-history': 1,
   'intervention-check': 1,
+  'seo-agent': 1,
 };

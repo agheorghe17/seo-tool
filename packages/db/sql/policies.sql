@@ -176,6 +176,18 @@ create policy page_traffic_history_owner on page_traffic_history for select usin
   exists (select 1 from sites s where s.id = page_traffic_history.site_id and s.user_id = auth.uid())
 );
 
+-- --- AI-agent phase ---
+alter table llm_usage       enable row level security;
+alter table seo_agent_notes enable row level security;
+
+drop policy if exists llm_usage_none on llm_usage;
+create policy llm_usage_none on llm_usage for select using (false);
+
+drop policy if exists seo_agent_notes_owner on seo_agent_notes;
+create policy seo_agent_notes_owner on seo_agent_notes for select using (
+  exists (select 1 from sites s where s.id = seo_agent_notes.site_id and s.user_id = auth.uid())
+);
+
 -- Realtime: the dashboard subscribes to crawl-row updates for live progress.
 do $$
 begin

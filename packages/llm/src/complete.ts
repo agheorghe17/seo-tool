@@ -3,7 +3,7 @@ import { parseExplanationJson } from './prompt.js';
 
 function resolveProvider(): LlmProvider {
   const v = process.env.LLM_PROVIDER;
-  return v === 'anthropic' || v === 'ollama' ? v : 'none';
+  return v === 'anthropic' || v === 'ollama' || v === 'gemini' ? v : 'none';
 }
 
 /**
@@ -11,12 +11,65 @@ function resolveProvider(): LlmProvider {
  * Same provider selection + graceful degrade as `explainIssue`: if `LLM_PROVIDER=none`
  * or the call fails, returns `null` and the caller uses a deterministic fallback.
  *
- * `system` must forbid invented facts + position/traffic promises. Output MUST be JSON.
+ * `system` must forbid invented facts + position/traffic promises. Output MUST be JSON
+ * when `opts.json` is set.
  */
 export interface CompleteOptions {
   provider?: LlmProvider;
   maxTokens?: number;
   temperature?: number;
+  /** Ask the provider for a strict JSON response (Gemini/Ollama honour this natively). */
+  json?: boolean;
+}
+
+async function geminiComplete(
+  system: string,
+  user: string,
+  opts: CompleteOptions,
+): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.GEMINI_MODEL ?? 'gemini-3.6-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const generationConfig: Record<string, unknown> = {
+    temperature: opts.temperature ?? 0,
+    maxOutputTokens: opts.maxTokens ?? 2048,
+  };
+  if (opts.json) generationConfig.responseMimeType = 'application/json';
+  // These are thinking models; cap the thinking budget for cost/latency on batch work.
+  const think = process.env.GEMINI_THINKING_BUDGET;
+  if (think != null && think !== '') {
+    generationConfig.thinkingConfig = { thinkingBudget: Number(think) };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Number(process.env.GEMINI_TIMEOUT_MS ?? 30_000));
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = (json.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim();
+    return text || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function completeText(
@@ -28,6 +81,10 @@ export async function completeText(
   if (provider === 'none') return null;
 
   try {
+    if (provider === 'gemini') {
+      return await geminiComplete(system, user, opts);
+    }
+
     if (provider === 'anthropic') {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) return null;
@@ -73,7 +130,7 @@ export async function completeJson<T>(
   user: string,
   opts: CompleteOptions = {},
 ): Promise<T | null> {
-  const raw = await completeText(system, user, opts);
+  const raw = await completeText(system, user, { ...opts, json: true });
   if (!raw) return null;
   const cleaned = raw
     .trim()

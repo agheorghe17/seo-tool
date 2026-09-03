@@ -50,6 +50,13 @@
       "when": 1788265108592,
       "tag": "0006_striped_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788433932619,
+      "tag": "0007_wakeful_captain_stacy",
+      "breakpoints": true
     }
   ]
 }

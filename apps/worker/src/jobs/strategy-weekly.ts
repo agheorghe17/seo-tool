@@ -19,6 +19,7 @@ export async function handleStrategyWeekly(_job: PgBoss.Job, boss: PgBoss): Prom
     await sendNext(boss, 'rank-refresh', { siteId: r.siteId });
     await sendNext(boss, 'traffic-history', { siteId: r.siteId });
     await sendNext(boss, 'intervention-check', { siteId: r.siteId });
+    await sendNext(boss, 'seo-agent', { siteId: r.siteId });
   }
   logger.info({ sites: rows.length }, 'strategy-weekly fan-out');
 }

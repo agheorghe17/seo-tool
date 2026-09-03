@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { LlmProvider } from 'shared';
 import { anthropicAdapter } from './adapters/anthropic.js';
+import { geminiAdapter } from './adapters/gemini.js';
 import { noneAdapter } from './adapters/none.js';
 import { ollamaAdapter } from './adapters/ollama.js';
 import { explanationIsGrounded } from './guardrail.js';
@@ -15,13 +16,14 @@ const ADAPTERS: Record<LlmProvider, LlmAdapter> = {
   none: noneAdapter,
   anthropic: anthropicAdapter,
   ollama: ollamaAdapter,
+  gemini: geminiAdapter,
 };
 
 const CACHE_TTL_SECONDS = Number(process.env.LLM_CACHE_TTL_SECONDS ?? 60 * 60 * 24 * 30);
 
 export function resolveProvider(): LlmProvider {
   const v = process.env.LLM_PROVIDER;
-  if (v === 'anthropic' || v === 'ollama' || v === 'none') return v;
+  if (v === 'anthropic' || v === 'ollama' || v === 'gemini' || v === 'none') return v;
   return 'none';
 }
 

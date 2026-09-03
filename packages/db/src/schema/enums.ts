@@ -30,7 +30,7 @@ export const secretKindEnum = pgEnum('secret_kind', [
   'ga4_refresh_token',
   'gbp_refresh_token',
 ]);
-export const llmProviderEnum = pgEnum('llm_provider', ['anthropic', 'ollama', 'none']);
+export const llmProviderEnum = pgEnum('llm_provider', ['anthropic', 'ollama', 'gemini', 'none']);
 export const keywordSourceEnum = pgEnum('keyword_source', ['gsc', 'dataforseo']);
 export const baselineSourceEnum = pgEnum('baseline_source', ['gsc', 'keyword_model']);
 export const confidenceLevelEnum = pgEnum('confidence_level', ['low', 'medium', 'high']);

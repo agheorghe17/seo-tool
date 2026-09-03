@@ -13,6 +13,7 @@ import {
   pages,
   recommendations,
   roadmapItems,
+  seoAgentNotes,
   sites,
   trafficEstimates,
 } from 'db';
@@ -407,6 +408,28 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         clicksLow: Math.round(cumLow),
         clicksHigh: Math.round(cumHigh),
       },
+    };
+  });
+
+  // --- AI agent: weekly review note (advisory) ---
+  app.get<{ Params: { id: string } }>('/api/sites/:id/agent-note', async (req, reply) => {
+    const site = await ownedSite(req.userId!, req.params.id);
+    if (!site) return reply.code(404).send({ error: 'not found' });
+    const [note] = await db
+      .select()
+      .from(seoAgentNotes)
+      .where(eq(seoAgentNotes.siteId, site.id))
+      .limit(1);
+    return {
+      note: note
+        ? {
+            summary: note.summary,
+            flags: note.flags,
+            model: note.model,
+            reviewed: note.reviewed,
+            createdAt: note.createdAt,
+          }
+        : null,
     };
   });
 

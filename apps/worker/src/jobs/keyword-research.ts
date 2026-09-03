@@ -2,7 +2,7 @@ import type PgBoss from 'pg-boss';
 import { eq, sql } from 'drizzle-orm';
 import { businessProfiles, db, keywordClusters, keywordData } from 'db';
 import { autocomplete, keywordplanner, getSerpProvider, serpEnabled } from 'connectors';
-import { completeJson } from 'llm';
+import { guardedCompleteJson as completeJson } from '../lib/llm.js';
 import {
   businessRelevance,
   classifyIntent,

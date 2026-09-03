@@ -215,6 +215,28 @@ export function useActionPlan(siteId: string) {
   });
 }
 
+/* ---- AI agent note ----------------------------------------------------------- */
+
+export interface AgentNote {
+  summary: string;
+  flags: { target: string; problem: string; suggestion: string }[];
+  model: string | null;
+  reviewed: number;
+  createdAt: string;
+}
+
+export function useAgentNote(siteId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['agent-note', siteId],
+    queryFn: () =>
+      apiFetch<{ note: AgentNote | null }>(`/api/sites/${siteId}/agent-note`, { token }).then(
+        (r) => r.note,
+      ),
+    enabled: !!token,
+  });
+}
+
 /* ---- D8: verify step ----------------------------------------------------------- */
 
 export function useVerifyStep(siteId: string) {

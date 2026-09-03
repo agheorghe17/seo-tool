@@ -426,4 +426,6 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
 
   // Refresh the traffic projection so it picks up the bottom-up page potentials.
   await sendNext(boss, 'estimate', { siteId, crawlId });
+  // Advisory AI review of the fresh plan (no-op unless LLM_PROVIDER is set).
+  await sendNext(boss, 'seo-agent', { siteId });
 }

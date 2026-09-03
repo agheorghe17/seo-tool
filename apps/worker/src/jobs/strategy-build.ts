@@ -10,7 +10,7 @@ import {
   keywordPlaybooks,
   roadmapItems,
 } from 'db';
-import { completeJson } from 'llm';
+import { guardedCompleteJson as completeJson } from '../lib/llm.js';
 import {
   clusterCoverage,
   pageContentGap,

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { useHome, type Signal } from '@/lib/home';
+import { useAgentNote } from '@/lib/insights';
 import { useStartCrawl, useSite } from '@/lib/queries';
 import { useRebuildStrategy } from '@/lib/strategy';
 import {
@@ -54,6 +55,7 @@ export default function AutopilotPage() {
   const router = useRouter();
   const { data: home, isLoading, error } = useHome(siteId);
   const { data: site } = useSite(siteId);
+  const { data: agentNote } = useAgentNote(siteId);
   const startCrawl = useStartCrawl(siteId);
   const rebuild = useRebuildStrategy(siteId);
   const [cmd, setCmd] = useState('');
@@ -239,6 +241,32 @@ export default function AutopilotPage() {
           />
         )}
       </div>
+
+      {/* AI agent review note */}
+      {agentNote && (
+        <div>
+          <SectionTitle>Nota agentului SEO</SectionTitle>
+          <Card>
+            <p className="text-sm">{agentNote.summary}</p>
+            {agentNote.flags.length > 0 && (
+              <ul className="mt-3 space-y-2 text-sm">
+                {agentNote.flags.map((f, i) => (
+                  <li key={i} className="rounded-[var(--radius-sm)] border border-[var(--border)] p-2">
+                    <div className="text-xs text-[var(--text-muted)]">{f.target}</div>
+                    <div className="mt-0.5">
+                      <span className="text-[var(--warn)]">{f.problem}</span> → {f.suggestion}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-[var(--text-faint)]">
+              {new Date(agentNote.createdAt).toLocaleDateString('ro-RO')} · a verificat{' '}
+              {agentNote.reviewed} elemente · sugestii, nu modificări automate
+            </p>
+          </Card>
+        </div>
+      )}
 
       {/* Live signals */}
       <div>

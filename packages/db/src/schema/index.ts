@@ -12,3 +12,4 @@ export * from './strategy.js';
 export * from './content.js';
 export * from './blueprints.js';
 export * from './results.js';
+export * from './agent.js';

@@ -1,7 +1,7 @@
 import type PgBoss from 'pg-boss';
 import { eq } from 'drizzle-orm';
 import { businessProfiles, db } from 'db';
-import { completeJson } from 'llm';
+import { guardedCompleteJson as completeJson } from '../lib/llm.js';
 import { tokens } from 'strategy';
 import { logger } from '../logger.js';
 import { sendNext } from '../queue.js';

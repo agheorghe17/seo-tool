@@ -63,6 +63,7 @@ export interface JobPayloads {
   'page-plan': SiteJob;
   'traffic-history': SiteJob;
   'intervention-check': SiteJob;
+  'seo-agent': SiteJob;
 }
 
 export type { JobType };
