@@ -11,8 +11,10 @@ import { logger } from '../logger.js';
  *   - and every failure path returns null → the caller uses its deterministic fallback.
  */
 const DAILY_MAX = Number(process.env.LLM_DAILY_MAX ?? 150);
-const MIN_INTERVAL_MS = Number(process.env.LLM_MIN_INTERVAL_MS ?? 5_000);
+const MIN_INTERVAL_MS = Number(process.env.LLM_MIN_INTERVAL_MS ?? 6_000);
 
+// Serialised gate: concurrent jobs queue instead of all firing at once (free-tier RPM).
+let gate: Promise<void> = Promise.resolve();
 let lastCallAt = 0;
 
 function today(): string {
@@ -43,10 +45,15 @@ async function reserve(): Promise<boolean> {
   }
 }
 
+/** Wait for our turn, then enforce the minimum gap since the previous call. */
 async function throttle(): Promise<void> {
-  const wait = MIN_INTERVAL_MS - (Date.now() - lastCallAt);
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastCallAt = Date.now();
+  const mine = gate.then(async () => {
+    const wait = MIN_INTERVAL_MS - (Date.now() - lastCallAt);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastCallAt = Date.now();
+  });
+  gate = mine.catch(() => {});
+  await mine;
 }
 
 /**

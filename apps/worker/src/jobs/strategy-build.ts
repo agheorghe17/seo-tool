@@ -24,6 +24,9 @@ import { latestCompletedCrawlId, ownPageLikes } from './strategy-shared.js';
 import type { StrategyBuildJob } from './types.js';
 
 const PLAYBOOK_TOP = Number(process.env.PLAYBOOK_TOP ?? 15);
+/** Only the top few briefs are LLM-refined; the rest use the deterministic template
+ * (keeps LLM calls per rebuild well under a free-tier rate limit). */
+const PLAYBOOK_LLM_TOP = Number(process.env.PLAYBOOK_LLM_TOP ?? 6);
 
 const PLAYBOOK_SYSTEM = [
   'Esti un specialist SEO. Primesti un cuvant cheie, date despre pagina proprie (daca exista) si',
@@ -134,7 +137,9 @@ export async function handleStrategyBuild(
     ),
   );
   const top = scored.slice(0, PLAYBOOK_TOP);
+  let idx = -1;
   for (const opp of top) {
+    idx++;
     const kwRow = kws.find((k) => k.keyword === opp.keyword);
     if (!kwRow) continue;
     const yourPage =
@@ -145,23 +150,26 @@ export async function handleStrategyBuild(
         .sort((a, b) => b.wordCount - a.wordCount)[0] ?? null;
     const gap = bestComp ? pageContentGap(yourPage, bestComp) : null;
 
-    let brief = await completeJson<{
-      title?: string;
-      slug?: string;
-      h2s?: string[];
-      mustCover?: string[];
-      faqs?: string[];
-      internalLinks?: string[];
-    }>(
-      PLAYBOOK_SYSTEM,
-      JSON.stringify({
-        keyword: opp.keyword,
-        yourPage: yourPage && { title: yourPage.title, headings: yourPage.headings.map((h) => h.text) },
-        competitorHeadings: bestComp?.headings.map((h) => h.text) ?? [],
-        missingVsCompetitor: gap?.missingHeadings ?? [],
-      }),
-      { maxTokens: 900 },
-    );
+    let brief =
+      idx < PLAYBOOK_LLM_TOP
+        ? await completeJson<{
+            title?: string;
+            slug?: string;
+            h2s?: string[];
+            mustCover?: string[];
+            faqs?: string[];
+            internalLinks?: string[];
+          }>(
+            PLAYBOOK_SYSTEM,
+            JSON.stringify({
+              keyword: opp.keyword,
+              yourPage: yourPage && { title: yourPage.title, headings: yourPage.headings.map((h) => h.text) },
+              competitorHeadings: bestComp?.headings.map((h) => h.text) ?? [],
+              missingVsCompetitor: gap?.missingHeadings ?? [],
+            }),
+            { maxTokens: 900 },
+          )
+        : null;
     if (!brief) {
       brief = {
         title: `${cap(opp.keyword)} — pagina dedicată`,

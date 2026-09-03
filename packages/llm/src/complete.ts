@@ -43,33 +43,47 @@ async function geminiComplete(
     generationConfig.thinkingConfig = { thinkingBudget: Number(think) };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Number(process.env.GEMINI_TIMEOUT_MS ?? 30_000));
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig,
-      }),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const text = (json.candidates?.[0]?.content?.parts ?? [])
-      .map((p) => p.text ?? '')
-      .join('')
-      .trim();
-    return text || null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig,
+  });
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS ?? 45_000);
+
+  // One retry on 429 (free-tier rate limit) with a bounded back-off.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: controller.signal,
+        body,
+      });
+      if (res.status === 429 && attempt === 0) {
+        const ra = Number(res.headers.get('retry-after'));
+        const waitMs = Math.min(30_000, (Number.isFinite(ra) && ra > 0 ? ra : 20) * 1000);
+        clearTimeout(timer);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (!res.ok) return null;
+      const json = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+      const text = (json.candidates?.[0]?.content?.parts ?? [])
+        .map((p) => p.text ?? '')
+        .join('')
+        .trim();
+      return text || null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
 }
 
 export async function completeText(
