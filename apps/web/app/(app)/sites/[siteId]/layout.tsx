@@ -7,6 +7,7 @@ import { useSite } from '@/lib/queries';
 
 const TABS = [
   { seg: '', label: 'Autopilot' },
+  { seg: 'plan', label: 'Plan' },
   { seg: 'tasks', label: 'Aprobări' },
   { seg: 'content', label: 'Conținut' },
   {

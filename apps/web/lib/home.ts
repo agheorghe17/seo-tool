@@ -125,17 +125,22 @@ export interface PipelineStep {
   type: string;
   status: 'running' | 'ok' | 'failed';
   error: string | null;
+  attempts: number;
   at: string;
+  startedAt: string;
+  durationMs: number | null;
 }
 
-export function usePipeline(siteId: string, poll = false) {
+export function usePipeline(siteId: string, poll = false, since?: string | null) {
   const token = useToken();
+  const qs = since ? `?since=${encodeURIComponent(since)}` : '';
   return useQuery({
-    queryKey: ['pipeline', siteId],
+    queryKey: ['pipeline', siteId, since ?? ''],
     queryFn: () =>
-      apiFetch<{ steps: PipelineStep[]; running: boolean }>(`/api/sites/${siteId}/pipeline`, {
-        token,
-      }),
+      apiFetch<{ steps: PipelineStep[]; running: boolean }>(
+        `/api/sites/${siteId}/pipeline${qs}`,
+        { token },
+      ),
     enabled: !!token,
     refetchInterval: poll ? 3000 : false,
   });

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, avg, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, avg, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import {
   crawls,
   db,
@@ -14,6 +14,7 @@ import {
   recommendations,
   roadmapItems,
   sites,
+  trafficEstimates,
 } from 'db';
 import {
   auditInternalLinks,
@@ -22,6 +23,7 @@ import {
   type LinkPage,
 } from 'strategy';
 import { fetchAndExtract } from 'crawler';
+import { estimatedClicks } from 'shared';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { recordIntervention } from '../lib/interventions.js';
@@ -183,42 +185,229 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // --- Phase A: pipeline status ---
-  app.get<{ Params: { id: string } }>('/api/sites/:id/pipeline', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { since?: string } }>(
+    '/api/sites/:id/pipeline',
+    async (req, reply) => {
+      const site = await ownedSite(req.userId!, req.params.id);
+      if (!site) return reply.code(404).send({ error: 'not found' });
+
+      // `since` scopes the strip to a single run (set when the user hits "Reface
+      // strategia"), so old / retried rows from earlier runs can't make finished
+      // steps flicker back to "running".
+      const since = req.query.since ? new Date(req.query.since) : null;
+      const validSince = since && !Number.isNaN(since.getTime()) ? since : null;
+
+      const rows = await db
+        .select({
+          type: jobRuns.type,
+          status: jobRuns.status,
+          error: jobRuns.error,
+          attempts: jobRuns.attempts,
+          startedAt: jobRuns.startedAt,
+          finishedAt: jobRuns.finishedAt,
+        })
+        .from(jobRuns)
+        .where(
+          validSince
+            ? and(eq(jobRuns.siteId, site.id), gte(jobRuns.startedAt, validSince))
+            : eq(jobRuns.siteId, site.id),
+        )
+        .orderBy(desc(jobRuns.startedAt))
+        .limit(120);
+
+      // Newest row per type (within the window). A failed row is only shown if no
+      // later attempt of the same type succeeded.
+      const latest = new Map<string, (typeof rows)[number]>();
+      for (const r of rows) {
+        const prev = latest.get(r.type);
+        if (!prev) latest.set(r.type, r);
+        else if (prev.status === 'failed' && r.status === 'ok') latest.set(r.type, r);
+      }
+      const order = [
+        'crawl',
+        'profile-extract',
+        'keyword-research',
+        'rank-import',
+        'competitor-crawl',
+        'strategy-build',
+        'page-plan',
+        'traffic-history',
+        'estimate',
+      ];
+      const steps = order
+        .filter((t) => latest.has(t))
+        .map((t) => {
+          const r = latest.get(t)!;
+          return {
+            type: t,
+            status: r.status,
+            error: r.error,
+            attempts: r.attempts ?? 1,
+            at: r.finishedAt ?? r.startedAt,
+            startedAt: r.startedAt,
+            durationMs:
+              r.finishedAt && r.startedAt
+                ? new Date(r.finishedAt).getTime() - new Date(r.startedAt).getTime()
+                : null,
+          };
+        });
+      const running = steps.some((s) => s.status === 'running');
+      return { steps, running };
+    },
+  );
+
+  // --- Compact 30/60/90 action plan with per-action traffic estimates ---
+  app.get<{ Params: { id: string } }>('/api/sites/:id/action-plan', async (req, reply) => {
     const site = await ownedSite(req.userId!, req.params.id);
     if (!site) return reply.code(404).send({ error: 'not found' });
-    const rows = await db
-      .select({
-        type: jobRuns.type,
-        status: jobRuns.status,
-        error: jobRuns.error,
-        startedAt: jobRuns.startedAt,
-        finishedAt: jobRuns.finishedAt,
-      })
-      .from(jobRuns)
-      .where(eq(jobRuns.siteId, site.id))
-      .orderBy(desc(jobRuns.startedAt))
-      .limit(60);
-    const latest = new Map<string, (typeof rows)[number]>();
-    for (const r of rows) if (!latest.has(r.type)) latest.set(r.type, r);
-    const order = [
-      'crawl',
-      'profile-extract',
-      'keyword-research',
-      'rank-import',
-      'competitor-crawl',
-      'strategy-build',
-      'page-plan',
-      'traffic-history',
-      'estimate',
-    ];
-    const steps = order
-      .filter((t) => latest.has(t))
-      .map((t) => {
-        const r = latest.get(t)!;
-        return { type: t, status: r.status, error: r.error, at: r.finishedAt ?? r.startedAt };
+
+    const [blueprints, roadmap, kwRows, estRow] = await Promise.all([
+      db
+        .select()
+        .from(pageBlueprints)
+        .where(eq(pageBlueprints.siteId, site.id))
+        .orderBy(asc(pageBlueprints.priority)),
+      db
+        .select()
+        .from(roadmapItems)
+        .where(eq(roadmapItems.siteId, site.id))
+        .orderBy(asc(roadmapItems.phase), asc(roadmapItems.sortOrder)),
+      db.select().from(keywordData).where(eq(keywordData.siteId, site.id)),
+      db
+        .select()
+        .from(trafficEstimates)
+        .where(eq(trafficEstimates.siteId, site.id))
+        .orderBy(desc(trafficEstimates.generatedAt))
+        .limit(1),
+    ]);
+    const kwById = new Map(kwRows.map((k) => [k.id, k]));
+
+    function bandFor(pos: number | null, hasPage: boolean): { low: number; high: number } {
+      if (pos == null) return hasPage ? { low: 8, high: 15 } : { low: 10, high: 18 };
+      if (pos <= 3) return { low: 1, high: 3 };
+      if (pos <= 10) return { low: 3, high: 6 };
+      if (pos <= 20) return { low: 4, high: 8 };
+      return { low: 8, high: 15 };
+    }
+
+    type Action = {
+      id: string;
+      kind: 'blueprint' | 'roadmap';
+      title: string;
+      why: string | null;
+      url: string | null;
+      keyword: string | null;
+      currentPosition: number | null;
+      targetPosLow: number | null;
+      targetPosHigh: number | null;
+      addClicksLow: number;
+      addClicksHigh: number;
+      qualitative: boolean;
+      status: string;
+      effort: number | null;
+      impact: number | null;
+    };
+
+    const byPhase: Record<30 | 60 | 90, Action[]> = { 30: [], 60: [], 90: [] };
+
+    // Blueprints → actions. Homepage + structural problems land in phase 30;
+    // the rest split by potential (bigger first).
+    const live = blueprints.filter((b) => b.status !== 'dismissed');
+    const ranked = [...live].sort(
+      (a, b) => (b.potential?.clicksHigh ?? 0) - (a.potential?.clicksHigh ?? 0),
+    );
+    live.forEach((b) => {
+      const p = b.potential;
+      const cur = p?.currentClicks ?? 0;
+      const qualitative = !p || p.qualitative;
+      const phase: 30 | 60 | 90 =
+        b.isHomepage || b.diagnosis !== 'ok'
+          ? 30
+          : ranked.indexOf(b) < Math.ceil(ranked.length / 2)
+            ? 60
+            : 90;
+      byPhase[phase].push({
+        id: b.id,
+        kind: 'blueprint',
+        title: b.isHomepage
+          ? `Homepage → „${b.targetKeyword ?? '—'}"`
+          : `${new URL(b.url).pathname} → „${b.targetKeyword ?? '—'}"`,
+        why: b.rationale,
+        url: b.url,
+        keyword: b.targetKeyword,
+        currentPosition: b.current?.position ?? null,
+        targetPosLow: p?.targetPosLow ?? null,
+        targetPosHigh: p?.targetPosHigh ?? null,
+        addClicksLow: qualitative ? 0 : Math.max(0, (p!.clicksLow ?? 0) - cur),
+        addClicksHigh: qualitative ? 0 : Math.max(0, (p!.clicksHigh ?? 0) - cur),
+        qualitative,
+        status: b.status,
+        effort: null,
+        impact: null,
       });
-    const running = steps.some((s) => s.status === 'running');
-    return { steps, running };
+    });
+
+    // Roadmap items → actions, keyed to their own phase.
+    for (const r of roadmap) {
+      const phase = (r.phase === 60 ? 60 : r.phase === 90 ? 90 : 30) as 30 | 60 | 90;
+      const kw = r.keywordId ? kwById.get(r.keywordId) : undefined;
+      const vol = kw && kw.searchVolume > 0 ? kw.searchVolume : null;
+      const pos = kw?.currentPosition ?? null;
+      const band = bandFor(pos, !!kw?.hasTargetPage);
+      const cur = vol != null ? estimatedClicks(vol, pos ?? 20) : 0;
+      byPhase[phase].push({
+        id: r.id,
+        kind: 'roadmap',
+        title: r.title,
+        why: r.why,
+        url: null,
+        keyword: kw?.keyword ?? null,
+        currentPosition: pos,
+        targetPosLow: vol != null ? band.low : null,
+        targetPosHigh: vol != null ? band.high : null,
+        addClicksLow: vol != null ? Math.max(0, estimatedClicks(vol, band.high) - cur) : 0,
+        addClicksHigh: vol != null ? Math.max(0, estimatedClicks(vol, band.low) - cur) : 0,
+        qualitative: vol == null,
+        status: r.status,
+        effort: r.effort,
+        impact: r.impact,
+      });
+    }
+
+    const est = estRow[0];
+    let cumLow = 0;
+    let cumHigh = 0;
+    const phases = ([30, 60, 90] as const).map((days) => {
+      const actions = byPhase[days];
+      const addLow = actions.reduce((s, a) => s + a.addClicksLow, 0);
+      const addHigh = actions.reduce((s, a) => s + a.addClicksHigh, 0);
+      cumLow += addLow;
+      cumHigh += addHigh;
+      return {
+        days,
+        actions,
+        addClicksLow: Math.round(addLow),
+        addClicksHigh: Math.round(addHigh),
+        cumulativeClicksLow: Math.round(cumLow),
+        cumulativeClicksHigh: Math.round(cumHigh),
+      };
+    });
+
+    const allActions = phases.flatMap((p) => p.actions);
+    return {
+      phases,
+      baselineMonthlyVisits: est?.baselineMonthlyVisits ?? 0,
+      baselineSource: est?.baselineSource ?? 'keyword_model',
+      confidence: est?.confidenceLevel ?? 'low',
+      projectionPhases: est?.phases ?? [],
+      assumptions: est?.assumptions ?? [],
+      totals: {
+        actions: allActions.length,
+        done: allActions.filter((a) => a.status === 'done' || a.status === 'applied').length,
+        clicksLow: Math.round(cumLow),
+        clicksHigh: Math.round(cumHigh),
+      },
+    };
   });
 
   // --- D7: agency portfolio ---

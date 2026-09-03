@@ -167,6 +167,54 @@ export function usePortfolio() {
   });
 }
 
+/* ---- Compact 30/60/90 action plan ---------------------------------------------- */
+
+export interface PlanAction {
+  id: string;
+  kind: 'blueprint' | 'roadmap';
+  title: string;
+  why: string | null;
+  url: string | null;
+  keyword: string | null;
+  currentPosition: number | null;
+  targetPosLow: number | null;
+  targetPosHigh: number | null;
+  addClicksLow: number;
+  addClicksHigh: number;
+  qualitative: boolean;
+  status: string;
+  effort: number | null;
+  impact: number | null;
+}
+
+export interface PlanPhase {
+  days: 30 | 60 | 90;
+  actions: PlanAction[];
+  addClicksLow: number;
+  addClicksHigh: number;
+  cumulativeClicksLow: number;
+  cumulativeClicksHigh: number;
+}
+
+export interface ActionPlan {
+  phases: PlanPhase[];
+  baselineMonthlyVisits: number;
+  baselineSource: 'gsc' | 'keyword_model';
+  confidence: 'low' | 'medium' | 'high';
+  projectionPhases: { days: number; low: number; mid: number; high: number }[];
+  assumptions: string[];
+  totals: { actions: number; done: number; clicksLow: number; clicksHigh: number };
+}
+
+export function useActionPlan(siteId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['action-plan', siteId],
+    queryFn: () => apiFetch<ActionPlan>(`/api/sites/${siteId}/action-plan`, { token }),
+    enabled: !!token,
+  });
+}
+
 /* ---- D8: verify step ----------------------------------------------------------- */
 
 export function useVerifyStep(siteId: string) {
