@@ -54,12 +54,21 @@ async function throttle(): Promise<void> {
  * (→ deterministic fallback) when the provider is `none`, the daily cap is hit, or
  * the call fails.
  */
+function providerReady(): boolean {
+  const p = resolveProvider();
+  if (p === 'none') return false;
+  if (p === 'gemini') return !!process.env.GEMINI_API_KEY;
+  if (p === 'anthropic') return !!process.env.ANTHROPIC_API_KEY;
+  return true; // ollama — assume the local endpoint is up
+}
+
 export async function guardedCompleteJson<T>(
   system: string,
   user: string,
   opts: CompleteOptions = {},
 ): Promise<T | null> {
-  if (resolveProvider() === 'none') return null;
+  // Check the provider is actually usable BEFORE spending from the daily budget.
+  if (!providerReady()) return null;
   if (!(await reserve())) return null;
   await throttle();
   return completeJson<T>(system, user, opts);

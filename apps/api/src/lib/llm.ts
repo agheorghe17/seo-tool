@@ -29,12 +29,20 @@ async function reserve(): Promise<boolean> {
   }
 }
 
+function providerReady(): boolean {
+  const p = resolveProvider();
+  if (p === 'none') return false;
+  if (p === 'gemini') return !!process.env.GEMINI_API_KEY;
+  if (p === 'anthropic') return !!process.env.ANTHROPIC_API_KEY;
+  return true;
+}
+
 export async function guardedCompleteJson<T>(
   system: string,
   user: string,
   opts: CompleteOptions = {},
 ): Promise<T | null> {
-  if (resolveProvider() === 'none') return null;
+  if (!providerReady()) return null;
   if (!(await reserve())) return null;
   return completeJson<T>(system, user, opts);
 }
