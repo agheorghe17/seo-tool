@@ -1,6 +1,7 @@
 import type PgBoss from 'pg-boss';
 import { and, avg, count, desc, eq, inArray } from 'drizzle-orm';
 import {
+  contentDrafts,
   crawls,
   db,
   impactCalibration,
@@ -116,6 +117,32 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
   }
   if (acc.high > 0) pageUpliftClicks = acc;
 
+  // Phase 4 — supporting blog articles: their own click potential (new pages) + a bounded
+  // internal-link boost to the pillar pages they link into.
+  const artRows = await db
+    .select({ estClicks: contentDrafts.estClicks, linkTo: contentDrafts.linkTo, status: contentDrafts.status })
+    .from(contentDrafts)
+    .where(and(eq(contentDrafts.siteId, siteId), eq(contentDrafts.kind, 'supporting')));
+  const contentAcc = { low: 0, mid: 0, high: 0 };
+  const pillarLinks = new Set<string>();
+  let linkingArticles = 0;
+  for (const r of artRows) {
+    if (r.status === 'discarded') continue;
+    const e = r.estClicks;
+    if (e) {
+      contentAcc.low += Math.max(0, e.low);
+      contentAcc.mid += Math.max(0, e.mid);
+      contentAcc.high += Math.max(0, e.high);
+    }
+    if (r.linkTo) {
+      pillarLinks.add(r.linkTo);
+      linkingArticles++;
+    }
+  }
+  const contentUpliftClicks = contentAcc.high > 0 ? contentAcc : undefined;
+  // +5% per supporting article that links to a pillar, capped at +25%.
+  const internalLinkBoost = linkingArticles > 0 ? 1 + Math.min(0.25, 0.05 * linkingArticles) : undefined;
+
   // Epic 23 — per-category calibration learned from this site's intervention outcomes.
   const calibRows = await db
     .select()
@@ -133,6 +160,8 @@ export async function handleEstimate(job: PgBoss.Job<EstimateJob>): Promise<void
     horizonMonths: HORIZON,
     gscConnected: Boolean(site.gscConnected),
     pageUpliftClicks,
+    contentUpliftClicks,
+    internalLinkBoost,
     categoryCalibration: Object.keys(categoryCalibration).length ? categoryCalibration : undefined,
   });
 

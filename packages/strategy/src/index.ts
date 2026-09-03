@@ -12,3 +12,5 @@ export * from './decay.js';
 export * from './internal-links.js';
 export * from './cannibalization.js';
 export * from './architecture.js';
+export * from './blog-plan.js';
+export * from './article-check.js';

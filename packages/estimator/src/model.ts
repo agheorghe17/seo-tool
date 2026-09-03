@@ -1,6 +1,6 @@
 import type { ConfidenceLevel, ScoreCategory } from 'shared';
 import { totalUpliftFraction } from './impact.js';
-import { assertNoUnrealisticGrowth, rampFraction } from './rampup.js';
+import { assertNoUnrealisticGrowth, MAX_MONTH_OVER_MONTH, rampFraction } from './rampup.js';
 
 export interface EstimateInput {
   baselineMonthlyVisits: number;
@@ -18,6 +18,18 @@ export interface EstimateInput {
    * number; it can only make the estimate MORE conservative, never inflate it.
    */
   pageUpliftClicks?: { low: number; mid: number; high: number };
+  /**
+   * Phase 4 — extra monthly clicks from the supporting blog-article plan (new pages for
+   * keywords with no page yet). Absolute clicks, an interval. Added on top of
+   * `pageUpliftClicks` for the bottom-up total; both are still ramped and capped.
+   */
+  contentUpliftClicks?: { low: number; mid: number; high: number };
+  /**
+   * Phase 4 — bounded multiplier for internal-link equity flowing to the pillar pages
+   * from supporting articles. Caller computes `1 + min(0.05 * nArticles, 0.25)`; clamped
+   * to 1.0..1.25 here. Applied to the bottom-up uplift only.
+   */
+  internalLinkBoost?: number;
   /**
    * Epic 23 — per-category multiplier learned from this site's own intervention outcomes
    * (`impact_calibration`). Bounded 0.5..1.5 by the caller. Scales that category's uplift.
@@ -149,33 +161,76 @@ export function estimateTraffic(input: EstimateInput): TrafficEstimateResult {
   fracMid = Math.min(fracMid, fracHigh);
   fracLow = Math.min(fracLow, fracMid);
 
-  // Epic 22 — blend in bottom-up per-page potential. It can only tighten the estimate.
-  const bu = input.pageUpliftClicks;
-  if (bu && baseline > 0 && (bu.low > 0 || bu.mid > 0 || bu.high > 0)) {
-    const f = (c: number) => Math.max(0, c) / baseline;
-    const buLow = f(bu.low);
-    const buMid = f(bu.mid);
-    const buHigh = f(bu.high);
-    // High: don't exceed the top-down cap, but let the data-grounded number pull it down
-    // toward mid (never below the top-down mid).
-    fracHigh = Math.min(fracHigh, Math.max(buHigh, fracMid));
-    fracMid = Math.min(fracHigh, (fracMid + buMid) / 2);
-    fracLow = Math.min(fracMid, Math.max(0, (fracLow + buLow) / 2));
-  }
+  // Bottom-up absolute clicks: blueprint fixes + supporting blog articles, with a bounded
+  // internal-link boost applied to the whole bottom-up sum.
+  const boost = Math.max(1, Math.min(1.25, input.internalLinkBoost ?? 1));
+  const sum = (a?: { low: number; mid: number; high: number }, b?: typeof a) => ({
+    low: Math.max(0, (a?.low ?? 0) + (b?.low ?? 0)) * boost,
+    mid: Math.max(0, (a?.mid ?? 0) + (b?.mid ?? 0)) * boost,
+    high: Math.max(0, (a?.high ?? 0) + (b?.high ?? 0)) * boost,
+  });
+  const buClicks = sum(input.pageUpliftClicks, input.contentUpliftClicks);
+  const hasBottomUp = buClicks.low > 0 || buClicks.mid > 0 || buClicks.high > 0;
 
   const series: MonthPoint[] = [];
-  for (let m = 1; m <= horizonMonths; m++) {
-    const r = rampFraction(m, horizonMonths);
-    series.push({
-      month: m,
-      low: Math.round(baseline * (1 + fracLow * r)),
-      mid: Math.round(baseline * (1 + fracMid * r)),
-      high: Math.round(baseline * (1 + fracHigh * r)),
-    });
+  const contentAssumption: string[] = [];
+
+  if (hasBottomUp && baseline < 20) {
+    // Near-zero current organic traffic → percentage growth is meaningless. Project in
+    // ABSOLUTE terms from the summed per-page/per-article potential. Still ramped, still
+    // capped at 2x month-over-month.
+    for (let m = 1; m <= horizonMonths; m++) {
+      const r = rampFraction(m, horizonMonths);
+      series.push({
+        month: m,
+        low: Math.round(baseline + buClicks.low * r),
+        mid: Math.round(baseline + buClicks.mid * r),
+        high: Math.round(baseline + buClicks.high * r),
+      });
+    }
+    contentAssumption.push(
+      'Trafic organic curent aproape zero — proiecția e suma potențialului paginilor și articolelor din plan (dacă ajung pe pozițiile țintă), nu o creștere procentuală.',
+    );
+  } else {
+    // Normal mode — blend the bottom-up fraction into the top-down cap (tighten only).
+    if (hasBottomUp && baseline > 0) {
+      const f = (c: number) => Math.max(0, c) / baseline;
+      fracHigh = Math.min(fracHigh, Math.max(f(buClicks.high), fracMid));
+      fracMid = Math.min(fracHigh, (fracMid + f(buClicks.mid)) / 2);
+      fracLow = Math.min(fracMid, Math.max(0, (fracLow + f(buClicks.low)) / 2));
+    }
+    for (let m = 1; m <= horizonMonths; m++) {
+      const r = rampFraction(m, horizonMonths);
+      series.push({
+        month: m,
+        low: Math.round(baseline * (1 + fracLow * r)),
+        mid: Math.round(baseline * (1 + fracMid * r)),
+        high: Math.round(baseline * (1 + fracHigh * r)),
+      });
+    }
+  }
+
+  // Clamp any month to at most 2x the previous month's midpoint (keeps the hard rule safe
+  // even in absolute mode when going from a tiny number to a small one).
+  for (let i = 1; i < series.length; i++) {
+    const prev = series[i - 1]!;
+    const cur = series[i]!;
+    if (prev.mid > 0 && cur.mid / prev.mid > MAX_MONTH_OVER_MONTH) {
+      const k = (MAX_MONTH_OVER_MONTH * prev.mid) / cur.mid;
+      cur.low = Math.round(cur.low * k);
+      cur.mid = Math.round(cur.mid * k);
+      cur.high = Math.round(cur.high * k);
+    }
   }
 
   // Epic 7.5 hard rule — refuse to emit a series implying >2x month-over-month growth.
   assertNoUnrealisticGrowth(series.map((p) => p.mid));
+
+  if (boost > 1) {
+    contentAssumption.push(
+      `Articolele de suport trimit linkuri interne către paginile-bani → +${Math.round((boost - 1) * 100)}% estimat pe upliftul acelor pagini (efect modest, plafonat).`,
+    );
+  }
 
   const last = series[series.length - 1]!;
   const confidenceLevel: ConfidenceLevel =
@@ -196,6 +251,7 @@ export function estimateTraffic(input: EstimateInput): TrafficEstimateResult {
         ? 'Baseline din date reale Google Search Console (ultimele luni).'
         : 'Baseline estimat din volume de căutare × CTR pe poziție (fără GSC conectat — încredere scăzută).',
       `Orizont de proiecție: ${horizonMonths} luni.`,
+      ...contentAssumption,
       ...BASE_ASSUMPTIONS,
     ],
   };

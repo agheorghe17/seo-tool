@@ -71,6 +71,13 @@
       "when": 1788436035057,
       "tag": "0009_lame_sphinx",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788438541636,
+      "tag": "0010_broad_tattoo",
+      "breakpoints": true
     }
   ]
 }

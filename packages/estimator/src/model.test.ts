@@ -87,6 +87,51 @@ describe('estimateTraffic — always an interval', () => {
     const b = estimateTraffic({ ...baseInput, pageUpliftClicks: { low: 0, mid: 0, high: 0 } });
     expect(b.estimateHigh).toBe(a.estimateHigh);
   });
+
+  it('near-zero baseline: projects the supporting-article clicks in absolute terms, ramped & capped', () => {
+    const e = estimateTraffic({
+      baselineMonthlyVisits: 3,
+      baselineSource: 'keyword_model',
+      openIssuesByCategory: { onpage: 4 },
+      siteScore: 40,
+      horizonMonths: 6,
+      gscConnected: false,
+      contentUpliftClicks: { low: 20, mid: 45, high: 90 },
+    });
+    // moves off ~zero…
+    expect(e.estimateMid).toBeGreaterThan(10);
+    // …but never above the summed potential + baseline…
+    expect(e.estimateHigh).toBeLessThanOrEqual(3 + 90 + 1);
+    // …month 1-2 barely move (re-index lag)…
+    expect(e.series[0]!.mid).toBeLessThan(8);
+    // …and the 2x month-over-month rule still holds.
+    for (let i = 1; i < e.series.length; i++) {
+      const prev = e.series[i - 1]!.mid;
+      if (prev > 0) expect(e.series[i]!.mid / prev).toBeLessThanOrEqual(2 + 1e-6);
+    }
+  });
+
+  it('internal-link boost is bounded and lifts the bottom-up total modestly', () => {
+    const noBoost = estimateTraffic({
+      baselineMonthlyVisits: 2,
+      baselineSource: 'keyword_model',
+      openIssuesByCategory: {},
+      siteScore: 40,
+      gscConnected: false,
+      contentUpliftClicks: { low: 10, mid: 20, high: 40 },
+    });
+    const boosted = estimateTraffic({
+      baselineMonthlyVisits: 2,
+      baselineSource: 'keyword_model',
+      openIssuesByCategory: {},
+      siteScore: 40,
+      gscConnected: false,
+      contentUpliftClicks: { low: 10, mid: 20, high: 40 },
+      internalLinkBoost: 5, // caller sends a big number; model clamps to 1.25
+    });
+    expect(boosted.estimateHigh).toBeGreaterThan(noBoost.estimateHigh);
+    expect(boosted.estimateHigh).toBeLessThanOrEqual(noBoost.estimateHigh * 1.25 + 2);
+  });
 });
 
 describe('assertNoUnrealisticGrowth', () => {

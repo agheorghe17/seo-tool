@@ -40,6 +40,8 @@ export const businessProfiles = pgTable('business_profiles', {
   geoLanguage: text('geo_language'),
   primaryCity: text('primary_city'),
   localEmphasis: boolean('local_emphasis').notNull().default(false),
+  /** Phase 4 — publish blog articles live automatically once every check passes. */
+  autoPublishBlog: boolean('auto_publish_blog').notNull().default(false),
   sourceCrawlId: uuid('source_crawl_id').references(() => crawls.id, { onDelete: 'set null' }),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

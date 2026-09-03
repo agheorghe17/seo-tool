@@ -4,7 +4,9 @@ import {
   businessProfiles,
   competitorPages,
   competitors,
+  contentDrafts,
   db,
+  keywordClusters,
   keywordData,
   keywordPlaybooks,
   pageBlueprints,
@@ -14,6 +16,7 @@ import { estimatedClicks } from 'shared';
 import {
   assignPageTargets,
   pageContentGap,
+  planBlogArticles,
   type KeywordCandidate,
   type PageLike,
 } from 'strategy';
@@ -415,16 +418,125 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
   }
 
   const sum = (xs: number[]) => xs.reduce((s, n) => s + n, 0);
+
+  // --- Phase 4: supporting blog-article plan (new pages + internal links to pillars) ---
+  const clusterRows = await db
+    .select({ id: keywordClusters.id, name: keywordClusters.name })
+    .from(keywordClusters)
+    .where(eq(keywordClusters.siteId, siteId));
+  const blueprintTargetKwIds = new Set(
+    assignments.map((a) => a.targetKeywordId).filter((x): x is string => !!x),
+  );
+  // Pillar per cluster = the blueprint whose target keyword sits in that cluster (best fit).
+  const pillars = assignments
+    .filter((a) => a.targetKeywordId && a.diagnosis !== 'orphan_page')
+    .map((a) => ({
+      clusterId: clusterOfKw.get(a.targetKeywordId!) ?? null,
+      url: a.url,
+      keyword: a.targetKeyword,
+    }))
+    .filter((p) => p.clusterId);
+  const seenPillarCluster = new Set<string>();
+  const pillarList = pillars.filter((p) => {
+    if (seenPillarCluster.has(p.clusterId!)) return false;
+    seenPillarCluster.add(p.clusterId!);
+    return true;
+  });
+  // Competitor articles per cluster (by target-keyword-guess token overlap with own keywords).
+  const compCounts = clusterRows.map((c) => {
+    const clusterKws = kwRows.filter((k) => k.clusterId === c.id).map((k) => k.keyword.toLowerCase());
+    const firstToks = new Set(clusterKws.map((k) => k.split(/\s+/)[0]).filter(Boolean));
+    const count = compPageRows.filter((r) => {
+      const g = (r.competitor_pages.targetKeywordGuess ?? '').toLowerCase();
+      return [...firstToks].some((t) => t && g.includes(t));
+    }).length;
+    return { clusterId: c.id, count };
+  });
+
+  const blogPlan = planBlogArticles(
+    kwRows.map((k) => ({
+      id: k.id,
+      keyword: k.keyword,
+      clusterId: k.clusterId,
+      intent: k.intent,
+      searchVolume: k.expansionSource === 'keyword_planner' || k.searchVolume > 0 ? k.searchVolume : null,
+      businessRelevance: k.businessRelevance,
+      opportunityScore: k.opportunityScore,
+      hasTargetPage: k.hasTargetPage,
+    })),
+    clusterRows,
+    pillarList as { clusterId: string | null; url: string; keyword: string | null }[],
+    compCounts,
+    { estimatedClicks, blueprintTargetKeywordIds: blueprintTargetKwIds },
+  );
+
+  // Upsert the plan into content_drafts (kind='supporting'), keeping user work.
+  const existingDrafts = await db
+    .select({
+      id: contentDrafts.id,
+      keywordId: contentDrafts.keywordId,
+      status: contentDrafts.status,
+      kind: contentDrafts.kind,
+    })
+    .from(contentDrafts)
+    .where(eq(contentDrafts.siteId, siteId));
+  const draftByKw = new Map(existingDrafts.filter((d) => d.keywordId).map((d) => [d.keywordId!, d]));
+  const planKwIds = new Set(blogPlan.articles.map((a) => a.keywordId));
+
+  for (const art of blogPlan.articles) {
+    const ex = draftByKw.get(art.keywordId);
+    const values = {
+      cluster: art.cluster,
+      pillarKeyword: art.linkToLabel,
+      linkTo: art.linkTo,
+      linkToLabel: art.linkToLabel,
+      anchor: art.anchor,
+      secondaryKeywords: art.secondaryKeywords,
+      targetWords: art.targetWords,
+      phase: art.phase,
+      estClicks: art.estClicks,
+    };
+    if (ex) {
+      // Don't disturb an article the user is already writing / has published.
+      if (ex.status === 'idea' || ex.status === 'prompt_ready') {
+        await db.update(contentDrafts).set({ ...values, kind: 'supporting', updatedAt: new Date() }).where(eq(contentDrafts.id, ex.id));
+      }
+    } else {
+      await db
+        .insert(contentDrafts)
+        .values({
+          siteId,
+          keywordId: art.keywordId,
+          kind: 'supporting',
+          status: 'idea',
+          title: `${cap(art.keyword)}`.slice(0, 200),
+          ...values,
+        })
+        .catch((err) => logger.warn({ err, kw: art.keyword }, 'blog draft insert skipped'));
+    }
+  }
+  // Drop supporting 'idea' rows that fell out of the plan.
+  const stale = existingDrafts.filter(
+    (d) => d.keywordId && !planKwIds.has(d.keywordId) && d.status === 'idea' && d.kind === 'supporting',
+  );
+  for (const d of stale) {
+    await db
+      .delete(contentDrafts)
+      .where(eq(contentDrafts.id, d.id))
+      .catch(() => {});
+  }
+
   logger.info(
     {
       siteId,
       blueprints: Math.min(assignments.length, MAX_BLUEPRINTS),
       pageUplift: { low: sum(upliftLow), mid: sum(upliftMid), high: sum(upliftHigh) },
+      blogArticles: blogPlan.totalRecommended,
     },
     'page-plan done',
   );
 
-  // Refresh the traffic projection so it picks up the bottom-up page potentials.
+  // Refresh the traffic projection so it picks up the bottom-up page + article potentials.
   await sendNext(boss, 'estimate', { siteId, crawlId });
   // Advisory AI review of the fresh plan (no-op unless LLM_PROVIDER is set).
   await sendNext(boss, 'seo-agent', { siteId });

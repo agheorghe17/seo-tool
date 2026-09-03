@@ -11,7 +11,11 @@ import { detectDecay } from './decay.js';
 import { auditInternalLinks } from './internal-links.js';
 import { resolveCannibalization } from './cannibalization.js';
 import { recommendArchitecture } from './architecture.js';
+import { planBlogArticles } from './blog-plan.js';
+import { checkArticle } from './article-check.js';
 import type { PageLike } from './types.js';
+
+const fakeClicks = (v: number, pos: number) => Math.round((v * Math.max(0.01, 0.3 / pos)) * 10) / 10;
 
 describe('classifyIntent', () => {
   it('maps common Romanian modifiers', () => {
@@ -308,5 +312,79 @@ describe('recommendArchitecture', () => {
     expect(plan.pillars.map((p) => p.clusterId)).toEqual(['big']);
     expect(plan.orphanClusters.map((o) => o.clusterId)).toContain('orphan');
     expect(plan.coverage).toEqual({ pillarsNeeded: 1, pillarsHave: 1 });
+  });
+});
+
+describe('planBlogArticles', () => {
+  it('proposes cluster articles that link to the pillar and skips pages that exist', () => {
+    const kws = [
+      { id: 'p1', keyword: 'servicii google ads', clusterId: 'c1', intent: 'commercial', searchVolume: 800, businessRelevance: 90, opportunityScore: 70, hasTargetPage: true },
+      { id: 'a1', keyword: 'cum functioneaza google ads', clusterId: 'c1', intent: 'informational', searchVolume: 500, businessRelevance: 75, opportunityScore: 55, hasTargetPage: false },
+      { id: 'a2', keyword: 'cat costa google ads', clusterId: 'c1', intent: 'commercial', searchVolume: 300, businessRelevance: 70, opportunityScore: 50, hasTargetPage: false },
+      { id: 'off', keyword: 'reteta paine', clusterId: 'c1', intent: 'informational', searchVolume: 900, businessRelevance: 5, opportunityScore: 10, hasTargetPage: false },
+    ];
+    const plan = planBlogArticles(
+      kws,
+      [{ id: 'c1', name: 'google ads' }],
+      [{ clusterId: 'c1', url: 'https://x.ro/servicii-google-ads', keyword: 'servicii google ads' }],
+      [{ clusterId: 'c1', count: 6 }],
+      { estimatedClicks: fakeClicks },
+    );
+    const kwsOut = plan.articles.map((a) => a.keyword);
+    expect(kwsOut).toEqual(expect.arrayContaining(['cum functioneaza google ads', 'cat costa google ads']));
+    expect(kwsOut).not.toContain('servicii google ads'); // has a page
+    expect(kwsOut).not.toContain('reteta paine'); // irrelevant
+    expect(plan.articles[0]!.linkTo).toBe('https://x.ro/servicii-google-ads');
+    expect(plan.articles[0]!.estClicks.high).toBeGreaterThan(0);
+    expect(plan.totalRecommended).toBe(plan.cadence.d30 + plan.cadence.d60 + plan.cadence.d90);
+  });
+});
+
+describe('checkArticle', () => {
+  const good = [
+    '# Cum functioneaza Google Ads',
+    '',
+    '## Pe scurt',
+    'Google Ads afiseaza anunturi platite in cautari. Platesti pe clic si controlezi bugetul zilnic.',
+    '',
+    '## Ce este Google Ads',
+    'Google Ads este platforma de reclame a Google. Poti targeta cuvinte cheie relevante pentru afacerea ta.',
+    'Daca vrei ajutor, vezi [serviciile noastre de google ads](https://x.ro/servicii-google-ads).',
+    '',
+    '## Cat costa',
+    'Costul depinde de competitie si de cuvintele cheie alese. Bugetul il stabilesti tu.',
+    '',
+    '## Cum incepi o campanie',
+    'Alegi obiectivul, cuvintele cheie si scrii anunturile. Apoi optimizezi pe baza datelor.',
+    '',
+    '## Intrebari frecvente',
+    'Cat dureaza pana vezi rezultate? De obicei cateva saptamani.',
+  ].join('\n');
+
+  it('passes a well-formed article and flags a missing internal link', () => {
+    const ok = checkArticle(good, {
+      keyword: 'google ads',
+      linkTo: 'https://x.ro/servicii-google-ads',
+      targetWords: 120,
+    });
+    expect(ok.checks.find((c) => c.id === 'link_pillar')!.status).toBe('pass');
+    expect(ok.checks.find((c) => c.id === 'one_h1')!.status).toBe('pass');
+
+    const noLink = checkArticle(good.replace('[serviciile noastre de google ads](https://x.ro/servicii-google-ads)', 'serviciile noastre'), {
+      keyword: 'google ads',
+      linkTo: 'https://x.ro/servicii-google-ads',
+      targetWords: 120,
+    });
+    expect(noLink.checks.find((c) => c.id === 'link_pillar')!.status).toBe('fail');
+    expect(noLink.pass).toBe(false);
+  });
+
+  it('fails on a position/traffic promise', () => {
+    const v = checkArticle(good + '\n\nCu noi vei ajunge pe locul 1 in Google, garantat.', {
+      keyword: 'google ads',
+      targetWords: 120,
+    });
+    expect(v.checks.find((c) => c.id === 'no_promises')!.status).toBe('fail');
+    expect(v.pass).toBe(false);
   });
 });
