@@ -411,7 +411,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // --- AI agent: weekly review note (advisory) ---
+  // --- AI agent: weekly review note + in-place edit counts ---
   app.get<{ Params: { id: string } }>('/api/sites/:id/agent-note', async (req, reply) => {
     const site = await ownedSite(req.userId!, req.params.id);
     if (!site) return reply.code(404).send({ error: 'not found' });
@@ -420,6 +420,14 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       .from(seoAgentNotes)
       .where(eq(seoAgentNotes.siteId, site.id))
       .limit(1);
+    const [edits] = await db
+      .select({
+        rewrites: sql<number>`count(*) filter (where ${pageBlueprints.agentRationale} is not null)::int`,
+        reranks: sql<number>`count(*) filter (where ${pageBlueprints.agentPriority} is not null)::int`,
+        insights: sql<number>`count(*) filter (where ${pageBlueprints.competitorInsight} is not null)::int`,
+      })
+      .from(pageBlueprints)
+      .where(eq(pageBlueprints.siteId, site.id));
     return {
       note: note
         ? {
@@ -430,6 +438,11 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
             createdAt: note.createdAt,
           }
         : null,
+      edits: {
+        rewrites: Number(edits?.rewrites ?? 0),
+        reranks: Number(edits?.reranks ?? 0),
+        insights: Number(edits?.insights ?? 0),
+      },
     };
   });
 

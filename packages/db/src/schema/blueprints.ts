@@ -54,7 +54,17 @@ export const pageBlueprints = pgTable(
       clicksHigh: number;
       qualitative: boolean;
     }>(),
+    /** LLM read of the best competitor page vs this one (Phase 3). */
+    competitorInsight: jsonb('competitor_insight').$type<{
+      competitorUrl: string;
+      missingTopics: string[];
+      angle: string;
+      depthNote: string;
+    } | null>(),
     rationale: text('rationale'),
+    /** Phase 3 — agent's in-place edits. NULL = untouched; revert = set back to NULL. */
+    agentRationale: text('agent_rationale'),
+    agentPriority: integer('agent_priority'),
     /** 'ok' | 'cannibalization' | 'orphan_page' | 'no_target' */
     diagnosis: text('diagnosis').notNull().default('ok'),
     priority: integer('priority').notNull().default(0),

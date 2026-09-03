@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { useHome, type Signal } from '@/lib/home';
 import { useAgentNote } from '@/lib/insights';
+import { useRevertAgentEdits } from '@/lib/plan';
 import { useStartCrawl, useSite } from '@/lib/queries';
 import { useRebuildStrategy } from '@/lib/strategy';
 import {
@@ -55,7 +56,8 @@ export default function AutopilotPage() {
   const router = useRouter();
   const { data: home, isLoading, error } = useHome(siteId);
   const { data: site } = useSite(siteId);
-  const { data: agentNote } = useAgentNote(siteId);
+  const { data: agent } = useAgentNote(siteId);
+  const revertAgent = useRevertAgentEdits(siteId);
   const startCrawl = useStartCrawl(siteId);
   const rebuild = useRebuildStrategy(siteId);
   const [cmd, setCmd] = useState('');
@@ -243,14 +245,14 @@ export default function AutopilotPage() {
       </div>
 
       {/* AI agent review note */}
-      {agentNote && (
+      {agent?.note && (
         <div>
           <SectionTitle>Nota agentului SEO</SectionTitle>
           <Card>
-            <p className="text-sm">{agentNote.summary}</p>
-            {agentNote.flags.length > 0 && (
+            <p className="text-sm">{agent.note.summary}</p>
+            {agent.note.flags.length > 0 && (
               <ul className="mt-3 space-y-2 text-sm">
-                {agentNote.flags.map((f, i) => (
+                {agent.note.flags.map((f, i) => (
                   <li key={i} className="rounded-[var(--radius-sm)] border border-[var(--border)] p-2">
                     <div className="text-xs text-[var(--text-muted)]">{f.target}</div>
                     <div className="mt-0.5">
@@ -260,9 +262,24 @@ export default function AutopilotPage() {
                 ))}
               </ul>
             )}
+            {(agent.edits.rewrites > 0 || agent.edits.reranks > 0 || agent.edits.insights > 0) && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-2)] p-2 text-xs">
+                <span>
+                  A modificat planul: {agent.edits.rewrites} explicații rescrise ·{' '}
+                  {agent.edits.reranks} reordonate · {agent.edits.insights} analize de competitor.
+                </span>
+                <button
+                  className="underline"
+                  disabled={revertAgent.isPending}
+                  onClick={() => revertAgent.mutate(undefined)}
+                >
+                  anulează tot
+                </button>
+              </div>
+            )}
             <p className="mt-3 text-xs text-[var(--text-faint)]">
-              {new Date(agentNote.createdAt).toLocaleDateString('ro-RO')} · a verificat{' '}
-              {agentNote.reviewed} elemente · sugestii, nu modificări automate
+              {new Date(agent.note.createdAt).toLocaleDateString('ro-RO')} · a verificat{' '}
+              {agent.note.reviewed} elemente · rescrierile sunt reversibile
             </p>
           </Card>
         </div>

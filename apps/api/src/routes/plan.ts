@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   businessProfiles,
   crawls,
@@ -107,7 +107,7 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         .select()
         .from(pageBlueprints)
         .where(eq(pageBlueprints.siteId, site.id))
-        .orderBy(asc(pageBlueprints.priority)),
+        .orderBy(asc(sql`coalesce(${pageBlueprints.agentPriority}, ${pageBlueprints.priority})`)),
       db
         .select()
         .from(trafficEstimates)
@@ -195,6 +195,11 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         'STRUCTURĂ — folosește aceste secțiuni H2 (adaptează formularea, păstrează ordinea):',
         bullets(rec?.h2Outline ?? []),
         '',
+        bp.competitorInsight && bp.competitorInsight.missingTopics.length
+          ? `SUBIECTE PE CARE COMPETITORUL LE ACOPERĂ ȘI TU NU (adaugă-le):\n${bullets(bp.competitorInsight.missingTopics)}`
+          : null,
+        bp.competitorInsight?.angle ? `UNGHI DE ABORDARE AL COMPETITORULUI: ${bp.competitorInsight.angle}` : null,
+        bp.competitorInsight ? '' : null,
         rec && rec.internalLinksOut.length
           ? `LINKURI INTERNE de inserat natural: ${rec.internalLinksOut.join(', ')}`
           : null,
@@ -316,6 +321,33 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
           () => {},
         );
       }
+      return { blueprint: updated };
+    },
+  );
+
+  // POST /api/sites/:id/agent/revert — undo ALL of the agent's in-place edits
+  app.post<{ Params: { id: string } }>('/api/sites/:id/agent/revert', async (req, reply) => {
+    const site = await ownedSite(req.userId!, req.params.id);
+    if (!site) return reply.code(404).send({ error: 'not found' });
+    const rows = await db
+      .update(pageBlueprints)
+      .set({ agentRationale: null, agentPriority: null })
+      .where(eq(pageBlueprints.siteId, site.id))
+      .returning({ id: pageBlueprints.id });
+    return { reverted: rows.length };
+  });
+
+  // POST /api/sites/:id/blueprints/:bpId/agent-revert — undo the agent's edit on one page
+  app.post<{ Params: { id: string; bpId: string } }>(
+    '/api/sites/:id/blueprints/:bpId/agent-revert',
+    async (req, reply) => {
+      const bp = await ownedBlueprint(req.userId!, req.params.bpId);
+      if (!bp || bp.siteId !== req.params.id) return reply.code(404).send({ error: 'not found' });
+      const [updated] = await db
+        .update(pageBlueprints)
+        .set({ agentRationale: null, agentPriority: null })
+        .where(eq(pageBlueprints.id, bp.id))
+        .returning();
       return { blueprint: updated };
     },
   );

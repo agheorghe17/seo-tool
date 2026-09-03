@@ -47,6 +47,15 @@ export interface Blueprint {
   recommended: BlueprintRecommended | null;
   potential: BlueprintPotential | null;
   rationale: string | null;
+  /** Phase 3 — the agent's in-place rewrite / rerank; NULL = untouched. */
+  agentRationale: string | null;
+  agentPriority: number | null;
+  competitorInsight: {
+    competitorUrl: string;
+    missingTopics: string[];
+    angle: string;
+    depthNote: string;
+  } | null;
   diagnosis: 'ok' | 'cannibalization' | 'orphan_page' | 'no_target';
   priority: number;
   status: 'draft' | 'approved' | 'applied' | 'dismissed';
@@ -98,6 +107,24 @@ export function useRebuildPlan(siteId: string) {
   return useMutation({
     mutationFn: () => apiFetch(`/api/sites/${siteId}/plan/rebuild`, { method: 'POST', token }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', siteId] }),
+  });
+}
+
+export function useRevertAgentEdits(siteId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bpId?: string) =>
+      apiFetch(
+        bpId
+          ? `/api/sites/${siteId}/blueprints/${bpId}/agent-revert`
+          : `/api/sites/${siteId}/agent/revert`,
+        { method: 'POST', token },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plan', siteId] });
+      qc.invalidateQueries({ queryKey: ['agent-note', siteId] });
+    },
   });
 }
 

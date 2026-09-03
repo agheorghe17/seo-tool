@@ -225,14 +225,16 @@ export interface AgentNote {
   createdAt: string;
 }
 
+export interface AgentNoteResponse {
+  note: AgentNote | null;
+  edits: { rewrites: number; reranks: number; insights: number };
+}
+
 export function useAgentNote(siteId: string) {
   const token = useToken();
   return useQuery({
     queryKey: ['agent-note', siteId],
-    queryFn: () =>
-      apiFetch<{ note: AgentNote | null }>(`/api/sites/${siteId}/agent-note`, { token }).then(
-        (r) => r.note,
-      ),
+    queryFn: () => apiFetch<AgentNoteResponse>(`/api/sites/${siteId}/agent-note`, { token }),
     enabled: !!token,
   });
 }

@@ -64,6 +64,13 @@
       "when": 1788434941985,
       "tag": "0008_worried_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788436035057,
+      "tag": "0009_lame_sphinx",
+      "breakpoints": true
     }
   ]
 }

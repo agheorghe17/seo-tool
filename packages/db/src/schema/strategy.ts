@@ -76,6 +76,8 @@ export const competitorPages = pgTable(
     headings: jsonb('headings_json').$type<{ level: number; text: string }[]>().default([]),
     wordCount: integer('word_count').notNull().default(0),
     schema: jsonb('schema_json').$type<string[]>().default([]),
+    /** First ~8 KB of the competitor page's main content — for the LLM gap read. */
+    mainText: text('main_text'),
     slug: text('slug'),
     targetKeywordGuess: text('target_keyword_guess'),
     publishedAt: timestamp('published_at', { withTimezone: true }),

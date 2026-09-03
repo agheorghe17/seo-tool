@@ -9,6 +9,7 @@ import {
   useDismissBlueprint,
   usePlan,
   useRebuildPlan,
+  useRevertAgentEdits,
   useRollbackBlueprint,
   type Blueprint,
   type PlanProjection,
@@ -287,6 +288,7 @@ function BlueprintCard({
   const dismiss = useDismissBlueprint(siteId);
   const promptM = useBlueprintPrompt(siteId);
   const learn = useLearnRule(siteId);
+  const revertAgent = useRevertAgentEdits(siteId);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [correcting, setCorrecting] = useState(false);
@@ -332,7 +334,50 @@ function BlueprintCard({
 
       {open && (
         <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4 text-sm animate-slide-up">
-          {bp.rationale && <p className="text-[var(--text-muted)]">{bp.rationale}</p>}
+          {(bp.agentRationale || bp.rationale) && (
+            <p className="text-[var(--text-muted)]">
+              {bp.agentRationale ?? bp.rationale}
+              {bp.agentRationale && (
+                <>
+                  {' '}
+                  <span className="text-[var(--text-faint)]">✎ agent</span>{' '}
+                  <button
+                    className="underline"
+                    onClick={() => revertAgent.mutate(bp.id)}
+                    disabled={revertAgent.isPending}
+                  >
+                    restaurează
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+
+          {bp.competitorInsight && (
+            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
+              <div className="text-xs font-medium">Ce acoperă competitorul și tu nu</div>
+              <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                {pathOf(bp.competitorInsight.competitorUrl)}
+              </div>
+              {bp.competitorInsight.missingTopics.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-[var(--text-muted)]">
+                  {bp.competitorInsight.missingTopics.map((t, i) => (
+                    <li key={i}>{t}</li>
+                  ))}
+                </ul>
+              )}
+              {bp.competitorInsight.angle && (
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  Unghi: {bp.competitorInsight.angle}
+                </p>
+              )}
+              {bp.competitorInsight.depthNote && (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  {bp.competitorInsight.depthNote}
+                </p>
+              )}
+            </div>
+          )}
 
           {rec && (
             <div className="grid gap-3 sm:grid-cols-2">
