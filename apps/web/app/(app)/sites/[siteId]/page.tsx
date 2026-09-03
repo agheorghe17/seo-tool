@@ -349,18 +349,17 @@ function QueueActions({ siteId, task }: { siteId: string; task: HomeTask }) {
 
 function Projection({ traffic }: { traffic: import('@/lib/home').HomeData['traffic'] }) {
   const [showAssumptions, setShowAssumptions] = useState(false);
-  const flat =
+  // Only truly hide when the estimator produced nothing usable.
+  const nothing =
     !traffic ||
     traffic.phases.length === 0 ||
-    traffic.baselineMonthlyVisits < 10 ||
     traffic.phases[traffic.phases.length - 1]!.high - traffic.phases[0]!.low < 3;
-  if (flat) {
+  if (nothing) {
     return (
       <Card>
         <p className="text-sm text-[var(--text-muted)]">
-          {traffic && traffic.baselineSource === 'gsc'
-            ? `Search Console arată foarte puțin trafic organic acum (~${traffic.baselineMonthlyVisits}/lună), deci o proiecție ar fi doar zgomot. Aplică blueprint-urile pe pagini și revino peste 3–4 săptămâni.`
-            : 'Proiecția devine utilă după ce conectezi Google Search Console (Setări) și aplici din blueprint-uri.'}
+          Proiecția apare după ce reface strategia (are nevoie de cuvinte cu volum) sau conectezi
+          Google Search Console în Setări.
         </p>
       </Card>
     );
@@ -389,7 +388,11 @@ function Projection({ traffic }: { traffic: import('@/lib/home').HomeData['traff
         </div>
       )}
       <div className="mb-2 flex items-baseline justify-between text-xs text-[var(--text-muted)]">
-        <span>Acum: ~{fmt(traffic.baselineMonthlyVisits)} vizite/lună</span>
+        <span>
+          {traffic.baselineSource === 'gsc'
+            ? `Acum: ~${fmt(traffic.baselineMonthlyVisits)} vizite/lună`
+            : 'Estimare din volume de căutare (fără Search Console)'}
+        </span>
         <span>
           Încredere:{' '}
           {traffic.confidence === 'high'
@@ -400,6 +403,12 @@ function Projection({ traffic }: { traffic: import('@/lib/home').HomeData['traff
           · interval, nu o promisiune
         </span>
       </div>
+      {traffic.baselineSource !== 'gsc' && (
+        <p className="mb-2 text-xs text-[var(--text-faint)]">
+          Conectează Google Search Console în Setări pentru o proiecție mai precisă, bazată pe
+          traficul tău real.
+        </p>
+      )}
       <div className="space-y-2">
         {traffic.phases.map((p) => (
           <div key={p.days} className="flex items-center gap-3 text-sm">

@@ -11,6 +11,7 @@ import {
   useRebuildPlan,
   useRollbackBlueprint,
   type Blueprint,
+  type PlanProjection,
 } from '@/lib/plan';
 import { useSite } from '@/lib/queries';
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from '@/components/ui';
@@ -87,6 +88,8 @@ export default function PagesPlanPage() {
         </p>
       )}
 
+      <PhaseProjection projection={data?.projection ?? null} />
+
       {blueprints.length === 0 ? (
         <EmptyState
           icon="🧭"
@@ -118,6 +121,99 @@ function pathOf(url: string) {
   } catch {
     return url;
   }
+}
+
+const PHASE_LABEL: Record<number, string> = {
+  30: 'La 30 de zile',
+  60: 'La 60 de zile',
+  90: 'La 90 de zile',
+  180: 'La 6 luni',
+};
+
+function PhaseProjection({ projection }: { projection: PlanProjection | null }) {
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const fmt = (n: number) => n.toLocaleString('ro-RO');
+
+  const usable =
+    projection &&
+    projection.phases.length > 0 &&
+    projection.phases[projection.phases.length - 1]!.high - projection.phases[0]!.low >= 3;
+
+  return (
+    <Card>
+      <div className="text-sm font-medium">Unde poți ajunge dacă aplici planul</div>
+      {!usable ? (
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Se calculează după ce reface strategia cu cuvinte care au volum de căutare. Conectează
+          Google Search Console în Setări pentru cifre bazate pe traficul tău real.
+        </p>
+      ) : (
+        <>
+          <div className="mt-1 mb-3 flex items-baseline justify-between text-xs text-[var(--text-muted)]">
+            <span>
+              {projection!.baselineSource === 'gsc'
+                ? `Acum: ~${fmt(projection!.baselineMonthlyVisits)} vizite/lună`
+                : 'Estimare din volume de căutare (fără Search Console conectat)'}
+            </span>
+            <span>
+              Încredere:{' '}
+              {projection!.confidence === 'high'
+                ? 'mare'
+                : projection!.confidence === 'medium'
+                  ? 'medie'
+                  : 'scăzută'}{' '}
+              · interval, nu o promisiune
+            </span>
+          </div>
+          <div className="space-y-2">
+            {(() => {
+              const max = Math.max(...projection!.phases.map((p) => p.high));
+              return projection!.phases.map((p) => (
+                <div key={p.days} className="flex items-center gap-3 text-sm">
+                  <span className="w-28 shrink-0 text-[var(--text-muted)]">
+                    {PHASE_LABEL[p.days] ?? `${p.days} zile`}
+                  </span>
+                  <div className="relative h-6 flex-1 rounded bg-[var(--surface-2)]">
+                    <div
+                      className="absolute inset-y-0 rounded bg-[var(--accent)]/25"
+                      style={{
+                        left: `${(p.low / max) * 100}%`,
+                        width: `${((p.high - p.low) / max) * 100}%`,
+                      }}
+                    />
+                    <div
+                      className="absolute inset-y-0 w-0.5 bg-[var(--accent)]"
+                      style={{ left: `${(p.mid / max) * 100}%` }}
+                    />
+                  </div>
+                  <span className="w-32 shrink-0 text-right tabular-nums">
+                    {fmt(p.low)}–{fmt(p.high)} <span className="text-[var(--text-faint)]">/lună</span>
+                  </span>
+                </div>
+              ));
+            })()}
+          </div>
+          {projection!.assumptions.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowAssumptions((v) => !v)}
+                className="mt-3 text-xs text-[var(--text-muted)] underline"
+              >
+                {showAssumptions ? 'ascunde ipotezele' : 'pe ce se bazează?'}
+              </button>
+              {showAssumptions && (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--text-muted)]">
+                  {projection!.assumptions.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </Card>
+  );
 }
 
 function BlueprintCard({
