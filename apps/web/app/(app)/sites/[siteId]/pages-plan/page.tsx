@@ -88,7 +88,7 @@ export default function PagesPlanPage() {
         </p>
       )}
 
-      <PhaseProjection projection={data?.projection ?? null} />
+      <PhaseProjection projection={data?.projection ?? null} blueprints={blueprints} />
 
       {blueprints.length === 0 ? (
         <EmptyState
@@ -130,7 +130,13 @@ const PHASE_LABEL: Record<number, string> = {
   180: 'La 6 luni',
 };
 
-function PhaseProjection({ projection }: { projection: PlanProjection | null }) {
+function PhaseProjection({
+  projection,
+  blueprints,
+}: {
+  projection: PlanProjection | null;
+  blueprints: Blueprint[];
+}) {
   const [showAssumptions, setShowAssumptions] = useState(false);
   const fmt = (n: number) => n.toLocaleString('ro-RO');
 
@@ -139,14 +145,63 @@ function PhaseProjection({ projection }: { projection: PlanProjection | null }) 
     projection.phases.length > 0 &&
     projection.phases[projection.phases.length - 1]!.high - projection.phases[0]!.low >= 3;
 
+  // Bottom-up fallback: when the current organic baseline is too small for a
+  // percentage projection, sum the per-page potentials directly.
+  const bottomUp = blueprints.reduce(
+    (acc, b) => {
+      const p = b.potential;
+      if (!p || p.qualitative) return acc;
+      acc.low += Math.max(0, p.clicksLow - (p.currentClicks ?? 0));
+      acc.mid += Math.max(0, p.clicksMid - (p.currentClicks ?? 0));
+      acc.high += Math.max(0, p.clicksHigh - (p.currentClicks ?? 0));
+      acc.pages += 1;
+      return acc;
+    },
+    { low: 0, mid: 0, high: 0, pages: 0 },
+  );
+
   return (
     <Card>
       <div className="text-sm font-medium">Unde poți ajunge dacă aplici planul</div>
       {!usable ? (
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Se calculează după ce reface strategia cu cuvinte care au volum de căutare. Conectează
-          Google Search Console în Setări pentru cifre bazate pe traficul tău real.
-        </p>
+        bottomUp.high >= 3 ? (
+          <>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Traficul organic de acum e prea mic pentru o proiecție în timp. Estimarea de mai jos e
+              suma potențialului paginilor din plan, dacă ajung pe pozițiile țintă — interval, nu o
+              promisiune.
+            </p>
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <span className="w-28 shrink-0 text-[var(--text-muted)]">
+                {bottomUp.pages} {bottomUp.pages === 1 ? 'pagină' : 'pagini'}
+              </span>
+              <div className="relative h-6 flex-1 rounded bg-[var(--surface-2)]">
+                <div
+                  className="absolute inset-y-0 rounded bg-[var(--accent)]/25"
+                  style={{ left: '0%', width: '100%' }}
+                />
+                <div
+                  className="absolute inset-y-0 w-0.5 bg-[var(--accent)]"
+                  style={{
+                    left: `${bottomUp.high ? (bottomUp.mid / bottomUp.high) * 100 : 50}%`,
+                  }}
+                />
+              </div>
+              <span className="w-36 shrink-0 text-right tabular-nums">
+                +{fmt(bottomUp.low)}–{fmt(bottomUp.high)}{' '}
+                <span className="text-[var(--text-faint)]">/lună</span>
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-faint)]">
+              Se traduce în timp după ce prinzi primele poziții: lunile 1–2 mișcare mică
+              (re-indexare), apoi creștere graduală.
+            </p>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Se calculează după ce reface strategia cu cuvinte care au volum de căutare.
+          </p>
+        )
       ) : (
         <>
           <div className="mt-1 mb-3 flex items-baseline justify-between text-xs text-[var(--text-muted)]">
