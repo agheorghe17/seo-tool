@@ -80,8 +80,10 @@ pnpm workspace links. `packages/shared` este sursa de adevăr pentru tipuri.
 - **Estimarea de trafic este ÎNTOTDEAUNA un interval** (`low`/`mid`/`high`) cu `assumptions` și `confidence_level`.
   Nu există cale de cod care emite o cifră fixă „garantată” sau o creștere > 2× lună-la-lună. Există teste care
   blochează asta.
-- **Scrierea pe site-uri** (WordPress) se face doar pentru fix-uri `auto_fixable` și doar cu confirmare explicită
-  (per-fix sau bulk). Valoarea veche se salvează în `recommendations.applied_result_json` pentru rollback.
+- **Scrierea pe site-uri** (WordPress): fix-urile `auto_fixable` (meta/alt) doar cu confirmare + rollback
+  (`recommendations.applied_result_json`). Articolele de blog se publică **live** (`wordpress.publishPost`)
+  doar dacă trec `strategy.checkArticle` (`verify.pass`) sau `?force`; publicarea automată la `PUT` cere
+  `business_profiles.auto_publish_blog`. Linkurile interne și 301-urile rămân **plan**, nu se scriu automat.
 - **Secretele site-urilor** (WP Application Password, GSC refresh token) se stochează criptate în `site_secrets`
   prin `encryptSecret` / `decryptSecret` din `packages/shared`. Nu loga niciodată valorile decriptate.
 - **RLS** este activat pe toate tabelele cu `user_id`. `SUPABASE_SERVICE_ROLE_KEY` doar pe server (api / worker).
@@ -144,10 +146,17 @@ pe Autopilot.
 `GET /api/sites/:id/home` întoarce `score` + `aiVisibility` (categoria `geo` promovată) + `signals[]`;
 `GET /api/sites/:id/signals`, `GET /api/sites/:id/tasks` (`apps/api/src/routes/home.ts`).
 
-**Conținut fără API plătit** (`apps/api/src/routes/content.ts`): aplicația asamblează un *prompt* din
-brief + profil + H2 competitori (`content_drafts.prompt_text`), utilizatorul îl rulează în Claude-ul
-lui, lipește articolul (`article_md`), iar `POST /content/:id/publish` îl pune pe WordPress **ca draft**
-(`wordpress.createDraftPost`, niciodată `status:'publish'`). `shared/mdToHtml` face conversia.
+**Conținut / Articole blog** (`apps/api/src/routes/content.ts`): aplicația asamblează un *prompt* din
+brief + profil + H2 competitori + linkul intern cerut (`content_drafts.prompt_text`), utilizatorul îl
+rulează în Claude-ul lui, lipește articolul (`article_md`). La `PUT /content/:id` rulează
+`strategy.checkArticle` (cuvinte cheie, link intern către pilon, structură, TL;DR/FAQ, lungime, fără
+promisiuni, near-duplication) + o notă LLM opțională → `content_drafts.verify`.
+**Publicare:** `wordpress.publishPost` (`status:'publish'`) e permis DOAR când verdictul trece
+(`verify.pass`) SAU `?force`. Dacă `business_profiles.auto_publish_blog` e activ, un articol care trece
+tot se publică **live automat** la `PUT`; altfel utilizatorul apasă „Publică pe blog". Yoast/RankMath
+adaugă postările publicate în sitemap. `wordpress.createDraftPost` rămâne pentru fluxul vechi de draft.
+Planul de articole de suport (`strategy.planBlogArticles`) e generat de `page-plan` în `content_drafts`
+(`kind='supporting'`); potențialul lor + un boost bounded de internal-link intră în `estimate`.
 
 **GA4** (`connectors/ga4.ts` + `routes/analytics.ts`): OAuth reuse (scope `analytics.readonly`),
 `/api/sites/:id/ga/connect` + `/api/sites/ga/callback`. **GBP** (`connectors/gbp.ts`): schelet în

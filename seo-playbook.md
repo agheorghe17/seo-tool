@@ -77,6 +77,20 @@ ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau ț
   site-ul a ales „Local — un oraș"** în Setări. O agenție/afacere online națională NU
   primește recomandări de SEO local.
 
+## Articole de blog (conținut de suport)
+
+- Articolele de suport țintesc **long-tail informațional/comercial** din același cluster ca o
+  pagină-bani, pentru cuvinte **fără pagină proprie** și cu relevanță ≥ 40.
+- Fiecare articol **linkează intern către pagina-bani** a clusterului, cu o ancoră **naturală și
+  variată** (nu exact-match pe fiecare articol, nu „aici"/„click aici").
+- Cadență realistă: ~2–4 articole/lună pentru un site mic; planul le împarte pe 30/60/90.
+- Structura obligatorie: H1 cu cuvântul cheie, „## Pe scurt" la început (răspuns direct), H2-uri
+  scanabile, „## Întrebări frecvente", lungime ≈ cel mai bun competitor.
+- Interzis: statistici/procente inventate, promisiuni de poziție/trafic, clișee AI, copiere după
+  competitor.
+- Se publică **live** doar după ce trec toate verificările (`checkArticle`). Cu „Publică automat"
+  activat, un articol care trece tot merge live fără clic; altfel e nevoie de un clic.
+
 ## Estimări de trafic
 
 - **Întotdeauna un interval** (`low`–`high`) cu ipoteze vizibile și nivel de

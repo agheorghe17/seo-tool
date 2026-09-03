@@ -207,6 +207,8 @@ export default function SettingsPage() {
 
       <ProfileCard siteId={siteId} />
 
+      <BlogPublishCard siteId={siteId} />
+
       <PlaybookCard siteId={siteId} />
 
       {site.lastCrawl && (
@@ -362,6 +364,31 @@ function ProfileCard({ siteId }: { siteId: string }) {
           </p>
         )}
       </div>
+    </Card>
+  );
+}
+
+function BlogPublishCard({ siteId }: { siteId: string }) {
+  const { data: profile } = useProfile(siteId);
+  const save = useSaveProfile(siteId);
+  const on = !!profile?.autoPublishBlog;
+  return (
+    <Card>
+      <SectionTitle>Publicare articole de blog</SectionTitle>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={save.isPending}
+          onChange={(e) => save.mutate({ autoPublishBlog: e.target.checked })}
+        />
+        <span className="text-[var(--text-muted)]">
+          <strong className="text-[var(--text)]">Publică automat articolele care trec toate verificările.</strong>{' '}
+          Când lipești un articol și toate verificările (cuvinte cheie, link intern, structură,
+          limbaj natural, fără promisiuni) sunt verzi, se publică <strong>live</strong> pe blog prin
+          pluginul WordPress. Dacă e oprit, primești un buton „Publică pe blog” după verificare.
+        </span>
+      </label>
     </Card>
   );
 }

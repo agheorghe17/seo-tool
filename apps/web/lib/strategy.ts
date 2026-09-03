@@ -15,6 +15,7 @@ export interface BusinessProfile {
   geoLanguage: string | null;
   primaryCity: string | null;
   localEmphasis: boolean;
+  autoPublishBlog: boolean;
   confirmedAt: string | null;
 }
 
