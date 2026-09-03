@@ -48,6 +48,7 @@ const profileBody = z.object({
   geoLanguage: z.string().max(8).optional(),
   primaryCity: z.string().max(80).nullable().optional(),
   localEmphasis: z.boolean().optional(),
+  autoPublishBlog: z.boolean().optional(),
   confirmed: z.boolean().optional(),
 });
 
@@ -88,6 +89,7 @@ export async function strategyRoutes(app: FastifyInstance): Promise<void> {
       geoLanguage: b.geoLanguage ?? prev?.geoLanguage ?? null,
       primaryCity: b.primaryCity !== undefined ? b.primaryCity : prev?.primaryCity ?? null,
       localEmphasis: b.localEmphasis ?? prev?.localEmphasis ?? false,
+      autoPublishBlog: b.autoPublishBlog ?? prev?.autoPublishBlog ?? false,
       confirmedAt: b.confirmed ? new Date() : prev?.confirmedAt ?? null,
       updatedAt: new Date(),
     };

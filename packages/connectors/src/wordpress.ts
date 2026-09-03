@@ -286,6 +286,44 @@ export async function createDraftPost(
   };
 }
 
+/**
+ * Phase 4 — publish a post LIVE. Only called after the platform's article checks pass
+ * (or the user forces it). Creates a new published post, or flips an existing draft to
+ * `publish` and refreshes its body. Yoast/RankMath auto-add published posts to the sitemap.
+ */
+export async function publishPost(
+  creds: WpCredentials,
+  input: DraftPostInput & { postId?: number },
+  opts: WpClientOptions = {},
+): Promise<DraftPostResult> {
+  const path = input.postId ? `/wp/v2/posts/${input.postId}` : '/wp/v2/posts';
+  const res = await wpPost<{ id?: number; link?: string; message?: string; code?: string }>(
+    creds,
+    path,
+    {
+      status: 'publish',
+      title: input.title,
+      content: input.contentHtml,
+      ...(input.slug ? { slug: input.slug } : {}),
+      ...(input.excerpt ? { excerpt: input.excerpt } : {}),
+    },
+    opts,
+  ).catch(() => ({ status: 0, body: null }) as { status: number; body: null });
+
+  if ((res.status === 201 || res.status === 200) && res.body?.id) {
+    return {
+      ok: true,
+      postId: res.body.id,
+      link: res.body.link,
+      editLink: `${normaliseSiteUrl(creds.siteUrl)}/wp-admin/post.php?post=${res.body.id}&action=edit`,
+    };
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, reason: 'Userul WordPress nu are permisiunea de a publica articole (publish_posts).' };
+  }
+  return { ok: false, reason: res.body?.message ?? `WordPress a răspuns ${res.status} la publicare.` };
+}
+
 /** Update the body/title of an existing draft (keeps it a draft). */
 export async function updateDraftPost(
   creds: WpCredentials,
