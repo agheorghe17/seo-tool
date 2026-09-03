@@ -427,20 +427,26 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
   const blueprintTargetKwIds = new Set(
     assignments.map((a) => a.targetKeywordId).filter((x): x is string => !!x),
   );
-  // Pillar per cluster = the blueprint whose target keyword sits in that cluster (best fit).
-  const pillars = assignments
+  // Pillar per cluster = a real service page in that cluster (NOT the homepage — a blog
+  // article linking to "/" is weak and the verifier can't anchor on an empty path).
+  // Fall back to the homepage only if the cluster has no other page.
+  const pillarCandidates = assignments
     .filter((a) => a.targetKeywordId && a.diagnosis !== 'orphan_page')
     .map((a) => ({
       clusterId: clusterOfKw.get(a.targetKeywordId!) ?? null,
       url: a.url,
       keyword: a.targetKeyword,
+      isHomepage: a.isHomepage,
     }))
-    .filter((p) => p.clusterId);
-  const seenPillarCluster = new Set<string>();
-  const pillarList = pillars.filter((p) => {
-    if (seenPillarCluster.has(p.clusterId!)) return false;
-    seenPillarCluster.add(p.clusterId!);
-    return true;
+    .filter((p): p is typeof p & { clusterId: string } => !!p.clusterId);
+  const byCluster = new Map<string, typeof pillarCandidates>();
+  for (const p of pillarCandidates) {
+    if (!byCluster.has(p.clusterId)) byCluster.set(p.clusterId, []);
+    byCluster.get(p.clusterId)!.push(p);
+  }
+  const pillarList = [...byCluster.entries()].map(([clusterId, cands]) => {
+    const pick = cands.find((c) => !c.isHomepage) ?? cands[0]!;
+    return { clusterId, url: pick.url, keyword: pick.keyword };
   });
   // Competitor articles per cluster (by target-keyword-guess token overlap with own keywords).
   const compCounts = clusterRows.map((c) => {

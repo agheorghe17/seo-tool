@@ -121,19 +121,31 @@ export function checkArticle(md: string, spec: ArticleSpec): ArticleVerdict {
   const mdLinks = [...md.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)].map((m) => ({ text: m[1]!, href: m[2]! }));
   const internal = mdLinks.filter((l) => !/^https?:\/\//i.test(l.href) || (spec.linkTo && l.href.includes(new URL(spec.linkTo).host)) || l.href.startsWith('/'));
   if (spec.linkTo) {
-    const wantPath = (() => {
-      try {
-        return new URL(spec.linkTo).pathname.replace(/\/+$/, '');
-      } catch {
-        return spec.linkTo.replace(/\/+$/, '');
+    let wantPath: string;
+    let wantHost = '';
+    try {
+      const u = new URL(spec.linkTo);
+      wantPath = u.pathname.replace(/\/+$/, '');
+      wantHost = u.host.replace(/^www\./, '');
+    } catch {
+      wantPath = spec.linkTo.replace(/\/+$/, '');
+    }
+    const isRoot = wantPath === '' || wantPath === '/';
+    const hit = mdLinks.some((l) => {
+      const h = l.href.replace(/\/+$/, '');
+      if (isRoot) {
+        // homepage link: "/", "https://host", "https://host/"
+        return h === '' || h === '/' || new RegExp(`^https?://(www\\.)?${wantHost}$`, 'i').test(h);
       }
-    })();
-    const hit = mdLinks.some((l) => l.href.replace(/\/+$/, '').endsWith(wantPath) && wantPath.length > 1);
+      return wantPath.length > 1 && h.endsWith(wantPath);
+    });
     add(
       'link_pillar',
       'Link intern către pagina-bani',
       hit ? 'pass' : 'fail',
-      hit ? `→ ${wantPath}` : `lipsește linkul spre ${wantPath}`,
+      hit
+        ? `→ ${isRoot ? 'homepage' : wantPath}`
+        : `lipsește linkul spre ${isRoot ? 'homepage' : wantPath || '(nedefinit)'}`,
     );
   }
   add(

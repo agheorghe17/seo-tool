@@ -387,4 +387,13 @@ describe('checkArticle', () => {
     expect(v.checks.find((c) => c.id === 'no_promises')!.status).toBe('fail');
     expect(v.pass).toBe(false);
   });
+
+  it('accepts a homepage link when linkTo is the site root', () => {
+    const md = good.replace(
+      '[serviciile noastre de google ads](https://x.ro/servicii-google-ads)',
+      '[serviciile noastre de google ads](https://x.ro/)',
+    );
+    const v = checkArticle(md, { keyword: 'google ads', linkTo: 'https://x.ro/', targetWords: 120 });
+    expect(v.checks.find((c) => c.id === 'link_pillar')!.status).toBe('pass');
+  });
 });
