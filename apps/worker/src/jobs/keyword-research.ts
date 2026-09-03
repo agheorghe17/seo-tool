@@ -17,6 +17,29 @@ import type { SiteJob } from './types.js';
 
 const MAX_KEYWORDS = Number(process.env.KEYWORD_UNIVERSE_MAX ?? 1000);
 
+// Company-form suffixes ("Salesup d.o.o", "X SRL") — navigational noise, never a target.
+const COMPANY_FORM = /\b(d\.?\s?o\.?\s?o|s\.?\s?r\.?\s?l|srl|sa|gmbh|ltd|llc|inc|kft|s\.?\s?p\.?\s?a)\b/i;
+
+/** Drop autocomplete drift: brand-only navigational queries, company names, gibberish. */
+function isJunkKeyword(
+  kw: string,
+  brandToks: Set<string>,
+  serviceToks: Set<string>,
+  hasVolume: boolean,
+): boolean {
+  if (COMPANY_FORM.test(kw)) return true;
+  const toks = kw.split(/\s+/).filter((t) => t.length > 1);
+  if (toks.length === 0) return true;
+  // Purely the brand (or brand + filler) with no service word and no search volume:
+  // the site already owns its brand, this isn't a growth target.
+  const meaningful = toks.filter((t) => !brandToks.has(t));
+  const touchesService = toks.some((t) => serviceToks.has(t));
+  if (!hasVolume && !touchesService && meaningful.length === 0) return true;
+  // Single long token that isn't a service and has no volume — typo / gibberish.
+  if (!hasVolume && !touchesService && toks.length === 1 && toks[0]!.length >= 8) return true;
+  return false;
+}
+
 const SEED_SYSTEM = [
   'Esti un specialist SEO. Din profilul unei afaceri, propune fraze seed pentru research de cuvinte cheie.',
   'Raspunde DOAR cu JSON: {"seeds": ["...", "..."]}. 12-25 seed-uri, in romana, fara diacritice.',
@@ -102,7 +125,21 @@ export async function handleKeywordResearch(job: PgBoss.Job<SiteJob>, boss: PgBo
     }
   }
 
-  const keywords = [...universe].filter((k) => k.length >= 3 && k.split(' ').length <= 8).slice(0, MAX_KEYWORDS);
+  const brandToks = new Set(
+    [
+      ...normalize(site.domain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('.')[0] ?? '').split(' '),
+      ...normalize(profileRow?.summary ?? '')
+        .split(' ')
+        .filter((t) => t.length > 3)
+        .slice(0, 2),
+    ].filter((t) => t.length > 2),
+  );
+  const serviceToks = new Set(profile.services.flatMap((s) => normalize(s).split(' ')).filter((t) => t.length > 2));
+
+  const keywords = [...universe]
+    .filter((k) => k.length >= 3 && k.split(' ').length <= 8)
+    .filter((k) => !isJunkKeyword(k, brandToks, serviceToks, (volumeByKw.get(k)?.volume ?? 0) > 0))
+    .slice(0, MAX_KEYWORDS);
 
   // 5) Cluster + classify + relevance, then upsert.
   const clusters = clusterKeywords(

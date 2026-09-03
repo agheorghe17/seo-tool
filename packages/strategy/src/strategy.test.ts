@@ -199,6 +199,24 @@ describe('assignPageTargets', () => {
     expect(res[0]!.diagnosis).toBe('orphan_page');
   });
 
+  it('keeps the homepage on a category term, not the highest-volume service', () => {
+    const pages = [page('https://x.ro/', 'x.ro — agentie de marketing digital')];
+    const kws = [
+      kw('k1', 'tiktok ads', { businessRelevance: 80, searchVolume: 5000 }),
+      kw('k2', 'agentie marketing digital', { businessRelevance: 85, searchVolume: 400 }),
+    ];
+    const res = assignPageTargets(pages, kws, { businessTerms: ['agentie', 'servicii'] });
+    expect(res[0]!.targetKeywordId).toBe('k2');
+  });
+
+  it('does not assign a target below the relevance floor', () => {
+    const pages = [page('https://x.ro/politica-confidentialitate', 'Politica de confidentialitate salesup')];
+    const kws = [kw('k1', 'salesup', { businessRelevance: 10, searchVolume: 0 })];
+    const res = assignPageTargets(pages, kws, { minRelevance: 30 });
+    expect(res[0]!.targetKeyword).toBeNull();
+    expect(res[0]!.targetKeywordId).toBeNull();
+  });
+
   it('prefers the local head term for the homepage when localEmphasis + primaryCity', () => {
     const pages = [page('https://x.ro/', 'x.ro')];
     const kws = [

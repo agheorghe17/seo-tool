@@ -33,6 +33,15 @@ export interface AssignOpts {
   primaryCity?: string | null;
   localEmphasis?: boolean;
   homepageUrl?: string;
+  /**
+   * Generic "what this business is" words (e.g. "agentie", "servicii", plus the
+   * core nouns from the profile summary). When set, the homepage is matched to a
+   * *category* term that contains one of these — not the single highest-volume
+   * service keyword.
+   */
+  businessTerms?: string[];
+  /** A (page, keyword) pair below this business-relevance is not an eligible target. */
+  minRelevance?: number;
 }
 
 function pathOf(url: string): string {
@@ -78,9 +87,11 @@ export function assignPageTargets(
   const hay = new Map(pages.map((p) => [p.url, pageHaystack(p)]));
   const fitOf = (url: string, kw: string) => tokenSimilarity(kw, hay.get(url) ?? '');
 
+  const floor = opts.minRelevance ?? 0;
   const pairs: { url: string; kwId: string; kw: string; fit: number; score: number }[] = [];
   for (const p of pages) {
     for (const k of keywords) {
+      if ((k.businessRelevance ?? 50) < floor) continue;
       const fit = fitOf(p.url, k.keyword);
       if (fit <= 0) continue;
       pairs.push({ url: p.url, kwId: k.id, kw: k.keyword, fit, score: pairScore(fit, k) });
@@ -88,7 +99,6 @@ export function assignPageTargets(
   }
   pairs.sort((a, b) => b.score - a.score);
 
-  const kwById = new Map(keywords.map((k) => [k.id, k]));
   const targetByUrl = new Map<string, { kwId: string; kw: string; fit: number }>();
   const claimedKw = new Set<string>();
 
@@ -102,11 +112,21 @@ export function assignPageTargets(
   // 2) Homepage owns the head term (highest relevance × volume), local variant if configured.
   const homeUrl = pages.find((p) => isHomepage(p.url, opts.homepageUrl))?.url;
   if (homeUrl) {
-    const ranked = [...keywords].sort((a, b) => {
-      const ra = ((a.businessRelevance ?? 0) / 100) * volumeNorm(a.searchVolume);
-      const rb = ((b.businessRelevance ?? 0) / 100) * volumeNorm(b.searchVolume);
-      return rb - ra;
-    });
+    const bizToks = new Set((opts.businessTerms ?? []).flatMap((t) => tokens(t)));
+    const rankBy = (k: KeywordCandidate) =>
+      ((k.businessRelevance ?? 0) / 100) * volumeNorm(k.searchVolume);
+    // Prefer *category* terms — a keyword that carries one of the business words
+    // (e.g. "agentie marketing") over a single high-volume service ("tiktok ads").
+    const categoryPool = bizToks.size
+      ? keywords.filter((k) => {
+          if ((k.businessRelevance ?? 0) < Math.max(floor, 40)) return false;
+          const kt = new Set(tokens(k.keyword));
+          for (const t of bizToks) if (kt.has(t)) return true;
+          return false;
+        })
+      : [];
+    const pool = categoryPool.length ? categoryPool : keywords;
+    const ranked = [...pool].sort((a, b) => rankBy(b) - rankBy(a));
     const localHead =
       opts.localEmphasis && cityToks.size
         ? ranked.find((k) => {
@@ -163,7 +183,8 @@ export function assignPageTargets(
       url: p.url,
       isHomepage: home,
       targetKeywordId: t?.kwId ?? null,
-      targetKeyword: t?.kw ?? (kwById.get(myPairs[0]?.kwId ?? '')?.keyword ?? null),
+      // No fabricated fallback — a page with no eligible match has no target.
+      targetKeyword: t?.kw ?? null,
       secondaryKeywordIds: secondary,
       diagnosis,
       competingUrls,

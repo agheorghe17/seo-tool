@@ -39,6 +39,41 @@ function isContactish(url: string): boolean {
   return p === '' || p === '/' || /\/(contact|despre|about|echipa|team)$/.test(p);
 }
 
+/** Legal / system / transactional pages that are never meant to rank — no blueprint. */
+function isUtilityPage(url: string): boolean {
+  const p = pathOf(url).toLowerCase();
+  return (
+    /(politica|policy|confidential|privacy|termeni|terms|conditii|cookie|gdpr|disclaimer|sitemap|harta-site)/.test(
+      p,
+    ) ||
+    /\/(cos|cart|checkout|comanda|cont|my-account|account|login|autentificare|inregistrare|register|wishlist|multumim|thank-you|thank_you|404)(\/|$)/.test(
+      p,
+    ) ||
+    /\/(cauta|search|tag|eticheta|autor|author|page)\//.test(p) ||
+    /\.(xml|txt|rss)$/.test(p)
+  );
+}
+
+/** Generic "what kind of business" words — used to keep the homepage on a category term. */
+const BUSINESS_WORDS = [
+  'agentie',
+  'agenție',
+  'servicii',
+  'serviciu',
+  'companie',
+  'firma',
+  'firmă',
+  'studio',
+  'consultanta',
+  'consultanță',
+  'birou',
+  'cabinet',
+  'clinica',
+  'clinică',
+  'magazin',
+  'atelier',
+];
+
 /** Brand label from the domain (the profile summary is free text, unreliable as a name). */
 function brandOf(domain: string): string {
   const host = domain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('.')[0] ?? domain;
@@ -76,7 +111,12 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
 
   const pageRows = await db.select().from(pagesTable).where(eq(pagesTable.crawlId, crawlId));
   const ownPages: (PageLike & { id: string; metaLen: number })[] = pageRows
-    .filter((p) => (p.indexability ?? 'indexable') === 'indexable' && (p.statusCode ?? 200) < 400)
+    .filter(
+      (p) =>
+        (p.indexability ?? 'indexable') === 'indexable' &&
+        (p.statusCode ?? 200) < 400 &&
+        !isUtilityPage(p.url),
+    )
     .map((p) => ({
       id: p.id,
       url: p.url,
@@ -130,10 +170,20 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
   }));
 
   const homepageUrl = ownPages.find((p) => pathOf(p.url) === '' || pathOf(p.url) === '/')?.url;
+  const summaryNouns = (profile?.summary ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 4);
   const assignments = assignPageTargets(ownPages, candidates, {
     primaryCity,
     localEmphasis,
     homepageUrl,
+    businessTerms: [...BUSINESS_WORDS, ...summaryNouns],
+    minRelevance: 30,
   });
 
   // Keep user decisions (applied / dismissed) across regenerations.
@@ -158,6 +208,10 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
     const page = pageById.get(a.url);
     const kwRow = a.targetKeywordId ? kwById.get(a.targetKeywordId) : undefined;
     const kwText = a.targetKeyword ?? kwRow?.keyword ?? null;
+
+    // A non-homepage page with no relevant keyword gets no blueprint — better an
+    // honest gap than a fabricated target on a support/legal/thin page.
+    if (!kwText && !a.isHomepage) continue;
     const pos = kwRow?.currentPosition ?? null;
     let vol =
       kwRow && (kwRow.expansionSource === 'keyword_planner' || kwRow.searchVolume > 0)
@@ -272,21 +326,29 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
       upliftHigh.push(Math.max(0, clicksHigh - (currentClicks ?? 0)));
     }
 
-    // --- rationale ---
-    const rationale =
-      a.diagnosis === 'no_target'
-        ? `Pagina nu are un cuvânt cheie clar. Cel mai bun candidat: „${kwText ?? '—'}". Aliniază title, H1 și slug pe el.`
-        : a.diagnosis === 'cannibalization'
-          ? `Această pagină concurează cu ${a.competingUrls.length} pagină/pagini proprii pe același subiect. Alege o singură pagină pentru „${kwText}" și diferențiază restul.`
-          : a.diagnosis === 'orphan_page'
-            ? 'Pagina are conținut dar niciun cuvânt cheie din strategie nu i se potrivește. Reorientează-o sau consolideaz-o cu alta.'
-            : a.isHomepage
-              ? `Homepage-ul ar trebui să țintească termenul principal „${kwText}". Pune-l în title și H1${
-                  useCity ? ` cu „${primaryCity}"` : ''
-                }, adaugă schema ${schemaType}.`
-              : `Optimizează pagina pentru „${kwText}"${
-                  pos != null ? ` (acum poziția ${Math.round(pos)})` : ''
-                }: title/H1 pe cuvânt, ${h2Outline.length} secțiuni recomandate, schema ${schemaType}.`;
+    // --- rationale — cite the actual signals, not a fixed template ---
+    const rel = kwRow?.businessRelevance ?? null;
+    const volBit = vol != null && vol > 0 ? `~${vol} căutări/lună` : 'volum de căutare necunoscut';
+    const posBit =
+      pos != null ? `acum ești pe poziția ~${Math.round(pos)}` : 'nu rankezi încă pentru el';
+    const relBit = rel != null ? `relevanță ${rel}/100 față de serviciile tale` : '';
+    const signals = [volBit, posBit, relBit].filter(Boolean).join(', ');
+
+    let rationale: string;
+    if (!kwText) {
+      rationale =
+        'Nicio potrivire relevantă din universul de cuvinte. Poate e o pagină de suport/legală (nu are nevoie de un cuvânt țintă) sau alege manual ținta.';
+    } else if (a.diagnosis === 'cannibalization') {
+      rationale = `Concurează cu ${a.competingUrls.length} pagină/pagini proprii pe „${kwText}". Ține o singură pagină pentru el (asta) și reorientează restul.`;
+    } else if (a.diagnosis === 'orphan_page') {
+      rationale = `Are conținut dar niciun cuvânt din strategie nu i se potrivește bine. Cel mai apropiat: „${kwText}" — dacă nu se leagă, consolideaz-o cu altă pagină.`;
+    } else if (a.isHomepage) {
+      rationale = `Homepage-ul reprezintă tot business-ul, deci țintește un termen de categorie, nu un serviciu anume: „${kwText}" (${signals}). Pune-l în title și H1${
+        useCity ? ` cu „${primaryCity}"` : ''
+      }, adaugă schema ${schemaType}.`;
+    } else {
+      rationale = `Pe baza titlului/H1/slug-ului, pagina asta se potrivește cel mai bine cu „${kwText}" (${signals}). Aliniază title și H1 pe el, adaugă ${h2Outline.length} secțiuni și schema ${schemaType}.`;
+    }
 
     const locked = lockedByUrl.get(a.url);
     const priority =
