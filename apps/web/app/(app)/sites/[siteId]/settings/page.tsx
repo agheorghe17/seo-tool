@@ -200,7 +200,7 @@ export default function SettingsPage() {
           >
             Trimite cererea
           </a>
-          . Până atunci, adăugăm schema LocalBusiness ca sarcină în Aprobări.
+          . Relevant doar dacă ai ales „Local — un oraș” la Piață țintă; altfel îl poți ignora.
         </p>
       </Card>
 
@@ -272,7 +272,7 @@ function ProfileCard({ siteId }: { siteId: string }) {
           <div className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
             Piață țintă
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="text-[var(--text-muted)]">Țară (cod)</span>
               <input value={countryVal} onChange={(e) => setCountry(e.target.value)} className={`mt-1 ${inputCls}`} />
@@ -281,18 +281,59 @@ function ProfileCard({ siteId }: { siteId: string }) {
               <span className="text-[var(--text-muted)]">Limbă (cod)</span>
               <input value={languageVal} onChange={(e) => setLanguage(e.target.value)} className={`mt-1 ${inputCls}`} />
             </label>
-            <label className="block">
-              <span className="text-[var(--text-muted)]">Oraș principal (opțional)</span>
-              <input value={cityVal} onChange={(e) => setCity(e.target.value)} placeholder="ex. București" className={`mt-1 ${inputCls}`} />
-            </label>
           </div>
-          <label className="mt-3 flex items-center gap-2">
-            <input type="checkbox" checked={localVal} onChange={(e) => setLocal(e.target.checked)} />
-            <span className="text-[var(--text-muted)]">
-              Accent local — homepage-ul și paginile de servicii țintesc și varianta „… {cityVal || 'oraș'}”
-              și primesc schema LocalBusiness.
-            </span>
-          </label>
+
+          <div className="mt-3">
+            <span className="text-[var(--text-muted)]">Tip de SEO</span>
+            <div className="mt-1 inline-flex rounded-[var(--radius-sm)] border border-[var(--border-strong)] p-0.5">
+              <button
+                type="button"
+                onClick={() => setLocal(false)}
+                className={`rounded-[calc(var(--radius-sm)-2px)] px-3 py-1.5 text-sm ${
+                  !localVal ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)]'
+                }`}
+              >
+                Național — toată țara
+              </button>
+              <button
+                type="button"
+                onClick={() => setLocal(true)}
+                className={`rounded-[calc(var(--radius-sm)-2px)] px-3 py-1.5 text-sm ${
+                  localVal ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)]'
+                }`}
+              >
+                Local — un oraș
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              {localVal ? (
+                <>
+                  Recomandări de SEO local: homepage-ul și paginile de servicii țintesc și varianta
+                  „… {cityVal || 'oraș'}”, primesc schema LocalBusiness (nume, adresă, telefon) și
+                  apar sarcini pentru Google Business Profile. Alege asta doar dacă ai o locație
+                  fizică sau servești un singur oraș.
+                </>
+              ) : (
+                <>
+                  Potrivit pentru o agenție sau o afacere online care vrea trafic din toată țara.
+                  Fără schema LocalBusiness, fără „oraș” forțat în titluri, fără sarcini de Business
+                  Profile.
+                </>
+              )}
+            </p>
+          </div>
+
+          {localVal && (
+            <label className="mt-3 block">
+              <span className="text-[var(--text-muted)]">Oraș principal</span>
+              <input
+                value={cityVal}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="ex. București"
+                className={`mt-1 ${inputCls}`}
+              />
+            </label>
+          )}
         </div>
 
         <Button
@@ -304,7 +345,7 @@ function ProfileCard({ siteId }: { siteId: string }) {
               locations: locationsVal.split(',').map((s) => s.trim()).filter(Boolean),
               geoCountry: countryVal.trim() || undefined,
               geoLanguage: languageVal.trim() || undefined,
-              primaryCity: cityVal.trim() || null,
+              primaryCity: localVal ? cityVal.trim() || null : null,
               localEmphasis: localVal,
               confirmed: true,
             })

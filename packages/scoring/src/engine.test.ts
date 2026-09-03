@@ -165,6 +165,22 @@ describe('scorePage — content & geo', () => {
     const { issues } = scorePage(makePage({ url: 'https://example.com/blog/post' }), ctx());
     expect(issues.some((i) => i.ruleId === 'onpage.localbusiness-schema')).toBe(false);
   });
+
+  it('skips onpage.localbusiness-schema for a national site (market.localSeo = false)', () => {
+    const { issues } = scorePage(
+      makePage({ url: 'https://example.com/contact', schemaTypes: ['Article'] }),
+      { ...ctx(), market: { localSeo: false } },
+    );
+    expect(issues.some((i) => i.ruleId === 'onpage.localbusiness-schema')).toBe(false);
+  });
+
+  it('keeps onpage.localbusiness-schema for a local site (market.localSeo = true)', () => {
+    const { issues } = scorePage(
+      makePage({ url: 'https://example.com/contact', schemaTypes: ['Article'] }),
+      { ...ctx(), market: { localSeo: true } },
+    );
+    expect(issues.some((i) => i.ruleId === 'onpage.localbusiness-schema')).toBe(true);
+  });
 });
 
 describe('scoreSite', () => {

@@ -33,6 +33,12 @@ export interface RuleContext {
     https: boolean;
     robotsTxtOk: boolean;
   };
+  /**
+   * Market posture from the site's business profile. `localSeo: false` (national /
+   * online-only) suppresses local-only rules (address/phone schema, NAP). Absent =
+   * treat as allowed, for callers that don't supply it.
+   */
+  market?: { localSeo: boolean };
 }
 
 export interface RuleResult {

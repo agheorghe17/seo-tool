@@ -142,7 +142,9 @@ export const localBusinessSchemaRule: Rule = {
   impactHint: 3,
   effortHint: 2,
   penalty: 18,
-  check(page) {
+  check(page, ctx) {
+    // National / online-only sites don't need address+phone schema — skip entirely.
+    if (ctx.market?.localSeo === false) return { passed: true };
     if (!looksLikeContactPage(page.url)) return { passed: true };
     const has = page.schemaTypes.some((t) => LOCAL_SCHEMA.test(t));
     return has

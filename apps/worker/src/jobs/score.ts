@@ -1,6 +1,6 @@
 import type PgBoss from 'pg-boss';
 import { eq, inArray } from 'drizzle-orm';
-import { db, issues, pages, type PageRow } from 'db';
+import { businessProfiles, crawls, db, issues, pages, type PageRow } from 'db';
 import { loadWeights, scorePage, scoreSite, type SiteFacts } from 'scoring';
 import type { PageData } from 'shared';
 import { logger } from '../logger.js';
@@ -59,6 +59,21 @@ export async function handleScore(job: PgBoss.Job<ScoreJob>, boss: PgBoss): Prom
     robotsTxtOk: true,
   };
 
+  // Market posture — national sites (local_emphasis off) skip local-only rules.
+  const [crawlRow] = await db
+    .select({ siteId: crawls.siteId })
+    .from(crawls)
+    .where(eq(crawls.id, crawlId));
+  let localSeo = false;
+  if (crawlRow?.siteId) {
+    const [profile] = await db
+      .select({ localEmphasis: businessProfiles.localEmphasis })
+      .from(businessProfiles)
+      .where(eq(businessProfiles.siteId, crawlRow.siteId));
+    localSeo = !!profile?.localEmphasis;
+  }
+  const market = { localSeo };
+
   // Idempotent re-run: clear existing page-level issues for this crawl.
   await db.delete(issues).where(
     inArray(
@@ -72,7 +87,7 @@ export async function handleScore(job: PgBoss.Job<ScoreJob>, boss: PgBoss): Prom
     const page = rowToPageData(row);
     const { scores, issues: pageIssues } = scorePage(
       page,
-      { siblings, site: facts },
+      { siblings, site: facts, market },
       { weights },
     );
     totals.push(scores.total);
