@@ -231,6 +231,12 @@ function BlueprintCard({
                   <>
                     {' '}
                     · ~{pot.clicksLow}–{pot.clicksHigh} vizite/lună (acum ~{pot.currentClicks ?? 0})
+                    {pot.volumeProxyKeyword && (
+                      <span className="text-[var(--text-muted)]">
+                        {' '}
+                        · volum estimat după „{pot.volumeProxyKeyword}”
+                      </span>
+                    )}
                   </>
                 )}
               </div>

@@ -44,6 +44,8 @@ export const pageBlueprints = pgTable(
     }>(),
     potential: jsonb('potential_json').$type<{
       searchVolume: number | null;
+      /** set when `searchVolume` is borrowed from a broader term (local long-tail with no Planner data) */
+      volumeProxyKeyword?: string | null;
       currentClicks: number | null;
       targetPosLow: number;
       targetPosHigh: number;

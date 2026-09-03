@@ -159,10 +159,34 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
     const kwRow = a.targetKeywordId ? kwById.get(a.targetKeywordId) : undefined;
     const kwText = a.targetKeyword ?? kwRow?.keyword ?? null;
     const pos = kwRow?.currentPosition ?? null;
-    const vol =
+    let vol =
       kwRow && (kwRow.expansionSource === 'keyword_planner' || kwRow.searchVolume > 0)
         ? kwRow.searchVolume
         : null;
+
+    // Homepage/contact often target a local long-tail ("{service} {city}") the
+    // Keyword Planner has no data for. Fall back to the volume of the closest
+    // broader term (same words minus the city) so the potential isn't blank.
+    let volumeProxyKeyword: string | null = null;
+    if ((vol == null || vol <= 0) && kwText) {
+      const cityToksLc = (primaryCity ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      const coreToks = kwText
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 1 && !cityToksLc.includes(w));
+      if (coreToks.length >= 2) {
+        const proxy = kwRows
+          .filter((k) => {
+            const kt = k.keyword.toLowerCase();
+            return k.searchVolume > 0 && coreToks.every((t) => kt.includes(t));
+          })
+          .sort((a, b) => b.searchVolume - a.searchVolume)[0];
+        if (proxy) {
+          vol = proxy.searchVolume;
+          volumeProxyKeyword = proxy.keyword;
+        }
+      }
+    }
 
     // Best competitor page for this keyword (by shared first token + word count).
     const firstTok = (kwText ?? '').split(/\s+/)[0]?.toLowerCase() ?? '';
@@ -310,6 +334,7 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
         },
         potential: {
           searchVolume: vol,
+          volumeProxyKeyword,
           currentClicks,
           targetPosLow: band.low,
           targetPosHigh: band.high,

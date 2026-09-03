@@ -1,5 +1,5 @@
 import type PgBoss from 'pg-boss';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { businessProfiles, db, keywordClusters, keywordData } from 'db';
 import { autocomplete, keywordplanner, getSerpProvider, serpEnabled } from 'connectors';
 import { completeJson } from 'llm';
@@ -143,7 +143,23 @@ export async function handleKeywordResearch(job: PgBoss.Job<SiteJob>, boss: PgBo
         gl: GL,
         hl: HL,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [keywordData.siteId, keywordData.keyword],
+        set: {
+          // Backfill volumes onto rows created by an earlier run (e.g. before the
+          // Keyword Planner token was approved). Keep the best number ever seen so
+          // a later empty planner response can't wipe a real volume.
+          searchVolume: sql`greatest(${keywordData.searchVolume}, excluded.search_volume)`,
+          competition: sql`coalesce(excluded.competition, ${keywordData.competition})`,
+          expansionSource: sql`case when excluded.search_volume > ${keywordData.searchVolume} then excluded.expansion_source else ${keywordData.expansionSource} end`,
+          intent: sql`excluded.intent`,
+          businessRelevance: sql`excluded.business_relevance`,
+          clusterId: sql`excluded.cluster_id`,
+          gl: sql`excluded.gl`,
+          hl: sql`excluded.hl`,
+          fetchedAt: new Date(),
+        },
+      });
     inserted++;
   }
 

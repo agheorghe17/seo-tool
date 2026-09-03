@@ -27,6 +27,7 @@ export interface BlueprintCurrent {
 
 export interface BlueprintPotential {
   searchVolume: number | null;
+  volumeProxyKeyword?: string | null;
   currentClicks: number | null;
   targetPosLow: number;
   targetPosHigh: number;
