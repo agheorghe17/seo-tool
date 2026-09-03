@@ -17,7 +17,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { TaskCard } from '@/components/TaskCard';
-import { PipelineStrip } from '@/components/PipelineStrip';
+import { PipelineStrip, markPipelineStart } from '@/components/PipelineStrip';
 import { pushToast } from '@/lib/toast';
 import type { HomeTask } from '@/lib/home';
 
@@ -74,7 +74,7 @@ export default function AutopilotPage() {
       startCrawl.mutate();
       setAck('Am pornit un scan nou. Se actualizează singur aici.');
     } else if (/strateg|reconstr|reîmprospăt|refa planul|actualizeaz/.test(t)) {
-      rebuild.mutate();
+      rebuild.mutate(undefined, { onSuccess: () => markPipelineStart(siteId) });
       setAck('Am pus la lucru: profil → cuvinte cheie → poziții → competitori → plan.');
     } else if (/articol|conținut|scrie|text|blog/.test(t)) {
       router.push(`/sites/${siteId}/content`);
@@ -186,7 +186,10 @@ export default function AutopilotPage() {
               loading={rebuild.isPending}
               onClick={() =>
                 rebuild.mutate(undefined, {
-                  onSuccess: () => pushToast('Strategia se reface în fundal.', 'success'),
+                  onSuccess: () => {
+                    markPipelineStart(siteId);
+                    pushToast('Strategia se reface în fundal.', 'success');
+                  },
                 })
               }
             >
