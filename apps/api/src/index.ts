@@ -13,6 +13,7 @@ import { homeRoutes } from './routes/home.js';
 import { insightsRoutes } from './routes/insights.js';
 import { meRoutes } from './routes/me.js';
 import { planRoutes } from './routes/plan.js';
+import { playbookRoutes } from './routes/playbook.js';
 import { recommendationRoutes } from './routes/recommendations.js';
 import { siteRoutes } from './routes/sites.js';
 import { strategyRoutes } from './routes/strategy.js';
@@ -78,6 +79,7 @@ await app.register(homeRoutes);
 await app.register(contentRoutes);
 await app.register(analyticsRoutes);
 await app.register(planRoutes);
+await app.register(playbookRoutes);
 await app.register(insightsRoutes);
 
 const close = async (signal: string) => {

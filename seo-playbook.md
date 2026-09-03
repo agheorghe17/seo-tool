@@ -3,6 +3,12 @@
 Regulile pe care agentul SEO le aplică la fiecare revizuire. **Editează acest fișier
 ca să-l „înveți".** Niche-agnostic — nimic specific unei industrii sau țări.
 
+> **Reguli învățate automat:** de fiecare dată când corectezi o recomandare în
+> aplicație („Nu e bine — corectează" pe o pagină, sau caseta din Setări → „Reguli
+> învățate"), regula se salvează în baza de date și agentul o aplică imediat, în plus
+> față de acest fișier. Vezi-le / editează-le în Setări; exportul complet:
+> `GET /api/sites/:id/playbook/export` (îl poți lipi înapoi aici și comite în git).
+
 ## Principii
 
 1. **Recomandările se bazează pe date, nu pe presupuneri.** Volum, poziție, relevanță,

@@ -179,6 +179,7 @@ create policy page_traffic_history_owner on page_traffic_history for select usin
 -- --- AI-agent phase ---
 alter table llm_usage       enable row level security;
 alter table seo_agent_notes enable row level security;
+alter table playbook_rules  enable row level security;
 
 drop policy if exists llm_usage_none on llm_usage;
 create policy llm_usage_none on llm_usage for select using (false);
@@ -186,6 +187,12 @@ create policy llm_usage_none on llm_usage for select using (false);
 drop policy if exists seo_agent_notes_owner on seo_agent_notes;
 create policy seo_agent_notes_owner on seo_agent_notes for select using (
   exists (select 1 from sites s where s.id = seo_agent_notes.site_id and s.user_id = auth.uid())
+);
+
+drop policy if exists playbook_rules_owner on playbook_rules;
+create policy playbook_rules_owner on playbook_rules for select using (
+  playbook_rules.site_id is null
+  or exists (select 1 from sites s where s.id = playbook_rules.site_id and s.user_id = auth.uid())
 );
 
 -- Realtime: the dashboard subscribes to crawl-row updates for live progress.

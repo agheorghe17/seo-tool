@@ -56,6 +56,9 @@ importers:
       jose:
         specifier: ^5.9.6
         version: 5.10.0
+      llm:
+        specifier: workspace:*
+        version: link:../../packages/llm
       pg-boss:
         specifier: ^10.1.6
         version: 10.4.2

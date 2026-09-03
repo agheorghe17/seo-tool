@@ -128,9 +128,18 @@ export function useDismissBlueprint(siteId: string) {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (bpId: string) =>
-      apiFetch(`/api/sites/${siteId}/blueprints/${bpId}/dismiss`, { method: 'POST', token }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', siteId] }),
+    mutationFn: (v: string | { bpId: string; reason?: string }) => {
+      const { bpId, reason } = typeof v === 'string' ? { bpId: v, reason: undefined } : v;
+      return apiFetch(`/api/sites/${siteId}/blueprints/${bpId}/dismiss`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify(reason ? { reason } : {}),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plan', siteId] });
+      qc.invalidateQueries({ queryKey: ['playbook', siteId] });
+    },
   });
 }
 

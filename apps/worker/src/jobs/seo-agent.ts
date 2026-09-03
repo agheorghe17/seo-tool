@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type PgBoss from 'pg-boss';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import {
   businessProfiles,
   db,
@@ -9,6 +9,7 @@ import {
   keywordData,
   pageBlueprints,
   pages,
+  playbookRules,
   recommendations,
   seoAgentNotes,
   crawls,
@@ -130,9 +131,28 @@ export async function handleSeoAgent(job: PgBoss.Job<SiteJob>): Promise<void> {
   );
   const examples = await readDoc('seo-golden-examples.md', '');
 
+  // Rules learned from the user's own corrections (this site + global).
+  const learned = await db
+    .select({ rule: playbookRules.rule })
+    .from(playbookRules)
+    .where(
+      and(
+        eq(playbookRules.active, true),
+        or(isNull(playbookRules.siteId), eq(playbookRules.siteId, siteId)),
+      ),
+    )
+    .orderBy(desc(playbookRules.createdAt))
+    .limit(60);
+  const learnedBlock = learned.length
+    ? `\n### REGULI INVATATE (din corectarile utilizatorului — au prioritate)\n${learned
+        .map((r) => `- ${r.rule}`)
+        .join('\n')}`
+    : '';
+
   const user = [
     '### PLAYBOOK', playbook,
     examples ? '\n### EXEMPLE' : '', examples,
+    learnedBlock,
     '\n### PLAN', JSON.stringify(payload, null, 1),
   ].join('\n');
 

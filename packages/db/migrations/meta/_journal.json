@@ -57,6 +57,13 @@
       "when": 1788433932619,
       "tag": "0007_wakeful_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788434941985,
+      "tag": "0008_worried_champions",
+      "breakpoints": true
     }
   ]
 }

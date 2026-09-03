@@ -14,6 +14,7 @@ import {
   type PlanProjection,
 } from '@/lib/plan';
 import { useSite } from '@/lib/queries';
+import { useLearnRule } from '@/lib/playbook';
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 
 const DIAG: Record<Blueprint['diagnosis'], { label: string; tone: 'good' | 'warning' | 'critical' | 'neutral' }> = {
@@ -285,8 +286,11 @@ function BlueprintCard({
   const rollback = useRollbackBlueprint(siteId);
   const dismiss = useDismissBlueprint(siteId);
   const promptM = useBlueprintPrompt(siteId);
+  const learn = useLearnRule(siteId);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [reason, setReason] = useState('');
 
   const d = DIAG[bp.diagnosis];
   const rec = bp.recommended;
@@ -416,10 +420,66 @@ function BlueprintCard({
             <Button size="sm" variant="ghost" onClick={getPrompt} disabled={promptM.isPending}>
               {copied ? '✓ Prompt copiat' : 'Copiază prompt de rescriere'}
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setCorrecting((v) => !v)}
+            >
+              Nu e bine — corectează
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => dismiss.mutate(bp.id)}>
               Renunță
             </Button>
           </div>
+
+          {correcting && (
+            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
+              <div className="text-xs text-[var(--text-muted)]">
+                Ce e greșit aici? Din răspunsul tău se adaugă o regulă în playbook, ca agentul să nu
+                mai repete greșeala.
+              </div>
+              <textarea
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder='ex. „Homepage-ul nu trebuie să țintească un serviciu; alege un termen de categorie."'
+                className="mt-2 w-full rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-transparent px-2 py-1.5 text-sm"
+              />
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  loading={learn.isPending}
+                  disabled={reason.trim().length < 4}
+                  onClick={() =>
+                    learn.mutate(
+                      {
+                        context: `Pagina ${bp.isHomepage ? '(homepage)' : pathOf(bp.url)}, țintă propusă „${bp.targetKeyword ?? '—'}"`,
+                        correction: reason.trim(),
+                        sourceRef: `blueprint:${bp.id}`,
+                      },
+                      { onSuccess: () => { setReason(''); setCorrecting(false); } },
+                    )
+                  }
+                >
+                  Adaugă regula
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={dismiss.isPending}
+                  disabled={reason.trim().length < 4}
+                  onClick={() =>
+                    dismiss.mutate(
+                      { bpId: bp.id, reason: reason.trim() },
+                      { onSuccess: () => { setReason(''); setCorrecting(false); } },
+                    )
+                  }
+                >
+                  Adaugă regula + renunță la pagină
+                </Button>
+              </div>
+            </div>
+          )}
           {!wpConnected && (
             <p className="text-xs text-[var(--text-faint)]">
               Conectează WordPress în Setări ca să aplici title + meta cu un clic.

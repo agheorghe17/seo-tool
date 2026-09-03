@@ -11,6 +11,7 @@ import {
   useVerifySite,
 } from '@/lib/queries';
 import { useProfile, useRebuildStrategy, useSaveProfile } from '@/lib/strategy';
+import { useAddRule, useDeleteRule, usePlaybook, useUpdateRule } from '@/lib/playbook';
 import { Badge, Button, Card, ErrorState, SectionTitle, Skeleton } from '@/components/ui';
 
 const METHODS = [
@@ -206,6 +207,8 @@ export default function SettingsPage() {
 
       <ProfileCard siteId={siteId} />
 
+      <PlaybookCard siteId={siteId} />
+
       {site.lastCrawl && (
         <p className="text-xs text-[var(--text-faint)]">
           Ultimul scan: {site.lastCrawl.status} · {site.lastCrawl.pagesScanned} pagini
@@ -359,6 +362,78 @@ function ProfileCard({ siteId }: { siteId: string }) {
           </p>
         )}
       </div>
+    </Card>
+  );
+}
+
+function PlaybookCard({ siteId }: { siteId: string }) {
+  const { data } = usePlaybook(siteId);
+  const add = useAddRule(siteId);
+  const update = useUpdateRule(siteId);
+  const del = useDeleteRule(siteId);
+  const [draft, setDraft] = useState('');
+
+  const rules = data?.rules ?? [];
+
+  return (
+    <Card>
+      <SectionTitle>Reguli învățate</SectionTitle>
+      <p className="mb-3 text-sm text-[var(--text-muted)]">
+        De fiecare dată când corectezi o recomandare („Nu e bine — corectează” pe o pagină), regula
+        se adaugă aici și agentul SEO o aplică la fiecare revizuire. Baza e în{' '}
+        <code>seo-playbook.md</code>; astea sunt adăugirile tale.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Scrie o regulă… ex. Nu propune schema FAQ pe pagini fără întrebări reale."
+          className={inputCls}
+        />
+        <Button
+          disabled={add.isPending || draft.trim().length < 5}
+          onClick={() => add.mutate({ rule: draft.trim() }, { onSuccess: () => setDraft('') })}
+        >
+          Adaugă
+        </Button>
+      </div>
+
+      {rules.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--text-faint)]">Nicio regulă învățată încă.</p>
+      ) : (
+        <ul className="mt-3 space-y-2 text-sm">
+          {rules.map((r) => (
+            <li
+              key={r.id}
+              className="flex items-start justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] p-2"
+            >
+              <div className={r.active ? '' : 'opacity-40 line-through'}>
+                <div>{r.rule}</div>
+                <div className="mt-0.5 text-xs text-[var(--text-faint)]">
+                  {r.source === 'correction' ? 'din corectare' : r.source === 'manual' ? 'manual' : 'agent'}
+                  {r.siteId ? '' : ' · toate site-urile'}
+                  {r.rationale ? ` · „${r.rationale.slice(0, 80)}"` : ''}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  className="text-xs text-[var(--text-muted)] underline"
+                  onClick={() => update.mutate({ id: r.id, active: !r.active })}
+                >
+                  {r.active ? 'dezactivează' : 'activează'}
+                </button>
+                <button
+                  className="text-xs text-[var(--bad)] underline"
+                  onClick={() => del.mutate(r.id)}
+                >
+                  șterge
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

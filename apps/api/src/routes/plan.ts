@@ -12,9 +12,11 @@ import {
 } from 'db';
 import { wordpress } from 'connectors';
 import { resolveCannibalization, type CannibalPage } from 'strategy';
+import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
 import { recordIntervention } from '../lib/interventions.js';
+import { learnFromCorrection } from '../lib/playbook.js';
 import { enqueue } from '../queue.js';
 import { loadWpCreds } from '../lib/wpCreds.js';
 
@@ -291,17 +293,29 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
     return { blueprint: updated };
   });
 
-  // POST /api/sites/:id/blueprints/:bpId/dismiss
+  // POST /api/sites/:id/blueprints/:bpId/dismiss  { reason? }
   app.post<{ Params: { id: string; bpId: string } }>(
     '/api/sites/:id/blueprints/:bpId/dismiss',
     async (req, reply) => {
       const bp = await ownedBlueprint(req.userId!, req.params.bpId);
       if (!bp || bp.siteId !== req.params.id) return reply.code(404).send({ error: 'not found' });
+      const reason = z
+        .object({ reason: z.string().max(600).optional() })
+        .safeParse(req.body ?? {});
+      const nextStatus = bp.status === 'dismissed' ? 'draft' : 'dismissed';
       const [updated] = await db
         .update(pageBlueprints)
-        .set({ status: bp.status === 'dismissed' ? 'draft' : 'dismissed', updatedAt: new Date() })
+        .set({ status: nextStatus, updatedAt: new Date() })
         .where(eq(pageBlueprints.id, bp.id))
         .returning();
+
+      // A dismissal WITH a reason is a correction → teach the playbook.
+      if (nextStatus === 'dismissed' && reason.success && reason.data.reason?.trim()) {
+        const context = `Pagina ${bp.isHomepage ? '(homepage)' : new URL(bp.url).pathname}, ținta propusă „${bp.targetKeyword ?? '—'}"`;
+        await learnFromCorrection(bp.siteId, context, reason.data.reason.trim(), `blueprint:${bp.id}`).catch(
+          () => {},
+        );
+      }
       return { blueprint: updated };
     },
   );
