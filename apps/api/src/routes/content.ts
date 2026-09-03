@@ -8,6 +8,7 @@ import {
   db,
   keywordData,
   keywordPlaybooks,
+  pages,
   sites,
 } from 'db';
 import { mdToHtml } from 'shared';
@@ -79,6 +80,7 @@ function buildPrompt(o: {
   secondaryKeywords: string[];
   linkTo: string | null;
   anchor: string | null;
+  otherInternalLinks: { url: string; label: string }[];
   competitorH2s: string[];
   missingTopics: string[];
 }): string {
@@ -95,7 +97,12 @@ function buildPrompt(o: {
     `LUNGIME ȚINTĂ: ~${o.targetWords} cuvinte.`,
     '',
     o.linkTo
-      ? `LINK INTERN OBLIGATORIU: inserează natural în corpul articolului un link către ${o.linkTo} folosind un text de ancoră ca „${o.anchor ?? o.keyword}" (nu „aici" / „click aici").`
+      ? `LINK INTERN OBLIGATORIU: inserează natural, în corpul articolului (nu în „Pe scurt"), un link Markdown către ${o.linkTo} cu ancoră descriptivă ca „${o.anchor ?? o.keyword}" — format [ancoră](${o.linkTo}). Nu folosi „aici" / „click aici".`
+      : null,
+    o.otherInternalLinks.length
+      ? `ÎNCĂ 1-2 LINKURI INTERNE către paginile de mai jos, unde e natural (total 2-4 linkuri interne în articol):\n${o.otherInternalLinks
+          .map((l) => `- [${l.label}](${l.url})`)
+          .join('\n')}`
       : null,
     '',
     'STRUCTURĂ (H2, adaptează formularea):',
@@ -266,6 +273,29 @@ export async function contentRoutes(app: FastifyInstance): Promise<void> {
     const kwText = draft.title?.toLowerCase() ?? 'articol';
     const comp = await bestCompetitorFor(draft.siteId, kwText);
 
+    // A couple more own pages to interlink: pages that already rank in the same cluster.
+    const otherInternalLinks: { url: string; label: string }[] = [];
+    if (draft.keywordId) {
+      const [self] = await db
+        .select({ clusterId: keywordData.clusterId })
+        .from(keywordData)
+        .where(eq(keywordData.id, draft.keywordId));
+      if (self?.clusterId) {
+        const rows = await db
+          .select({ url: pages.url, kw: keywordData.keyword })
+          .from(keywordData)
+          .innerJoin(pages, eq(pages.id, keywordData.targetPageId))
+          .where(and(eq(keywordData.siteId, draft.siteId), eq(keywordData.clusterId, self.clusterId)));
+        const norm = (u: string) => u.replace(/\/+$/, '');
+        for (const r of rows) {
+          if (otherInternalLinks.length >= 2) break;
+          if (draft.linkTo && norm(r.url) === norm(draft.linkTo)) continue;
+          if (otherInternalLinks.some((x) => norm(x.url) === norm(r.url))) continue;
+          otherInternalLinks.push({ url: r.url, label: r.kw });
+        }
+      }
+    }
+
     const prompt = buildPrompt({
       domain: (await ownedSite(req.userId!, draft.siteId))?.domain ?? '',
       keyword: kwText,
@@ -277,6 +307,7 @@ export async function contentRoutes(app: FastifyInstance): Promise<void> {
       secondaryKeywords: (draft.secondaryKeywords as string[] | null) ?? [],
       linkTo: draft.linkTo,
       anchor: draft.anchor,
+      otherInternalLinks,
       competitorH2s: (comp?.headings ?? []).map((h) => h.text),
       missingTopics: [],
     });
