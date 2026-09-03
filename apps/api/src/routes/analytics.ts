@@ -83,10 +83,34 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
     authed.get<{ Params: { id: string } }>('/api/sites/:id/ga/traffic', async (req, reply) => {
       const site = await ownedSite(req.userId!, req.params.id);
       if (!site) return reply.code(404).send({ error: 'not found' });
-      if (!site.ga4Property) return reply.code(404).send({ error: 'GA4 not connected' });
 
       const refresh = await loadGoogleRefreshToken(site.id, 'ga4_refresh_token');
       if (!refresh) return reply.code(409).send({ error: 'GA4 token missing — reconnect' });
+
+      // Property auto-discovery can fail at callback time (Admin API not enabled
+      // yet, race). Retry it here, lazily, and persist what we find.
+      let property = site.ga4Property;
+      if (!property) {
+        try {
+          const token = await ga4.refreshAccessToken(refresh);
+          const list = await ga4.listProperties(token);
+          property = ga4.pickProperty(site.domain, list);
+          if (property) {
+            await db.update(sites).set({ ga4Property: property }).where(eq(sites.id, site.id));
+          }
+          req.log.info(
+            { siteId: site.id, properties: list.map((p) => p.property), picked: property },
+            'ga4 lazy property discovery',
+          );
+        } catch (err) {
+          req.log.warn({ err, siteId: site.id }, 'ga4 lazy property discovery failed');
+        }
+        if (!property) {
+          return reply
+            .code(409)
+            .send({ error: 'GA4 conectat, dar nicio proprietate accesibilă cu acest cont Google' });
+        }
+      }
 
       try {
         const totals = await withCache(
@@ -95,7 +119,7 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
           6 * 60 * 60,
           async () => {
             const token = await ga4.refreshAccessToken(refresh);
-            return ga4.fetchTotals(token, site.ga4Property!, 90);
+            return ga4.fetchTotals(token, property!, 90);
           },
         );
         return { traffic: { ...totals, monthlyOrganic: Math.round(totals.organicSessions / 3) } };

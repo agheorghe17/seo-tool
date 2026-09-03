@@ -89,8 +89,21 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
     const site = await loadOwnedSite(req.userId!, req.params.id);
     if (!site) return reply.code(404).send({ error: 'not found' });
     const latest = await latestCrawlsBySite([site.id]);
+    const secretKinds = await db
+      .select({ kind: siteSecrets.kind })
+      .from(siteSecrets)
+      .where(eq(siteSecrets.siteId, site.id));
+    const kinds = new Set(secretKinds.map((s) => s.kind));
     return {
-      site: { ...site, verified: site.verifiedAt != null, lastCrawl: latest.get(site.id) ?? null },
+      site: {
+        ...site,
+        verified: site.verifiedAt != null,
+        lastCrawl: latest.get(site.id) ?? null,
+        // A stored refresh token = the OAuth link is live, even if property
+        // auto-discovery didn't land a value on `ga4Property` yet.
+        ga4Connected: kinds.has('ga4_refresh_token'),
+        gbpConnected: kinds.has('gbp_refresh_token'),
+      },
     };
   });
 

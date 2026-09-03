@@ -15,6 +15,8 @@ export interface SiteDto {
   verified: boolean;
   gscConnected: boolean;
   ga4Property: string | null;
+  ga4Connected: boolean;
+  gbpConnected: boolean;
   gbpLocation: string | null;
   wpSiteUrl: string | null;
   lastCrawl: CrawlDto | null;

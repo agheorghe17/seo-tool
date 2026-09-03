@@ -153,9 +153,9 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <SectionTitle>Google Analytics 4</SectionTitle>
           <div className="flex items-center gap-2">
-            {site.ga4Property && <Badge tone="good">conectat</Badge>}
+            {site.ga4Connected && <Badge tone="good">conectat</Badge>}
             <Button size="sm" variant="ghost" onClick={() => connectGa.mutate()}>
-              {site.ga4Property ? 'Reconectează' : 'Conectează'}
+              {site.ga4Connected ? 'Reconectează' : 'Conectează'}
             </Button>
           </div>
         </div>
@@ -163,6 +163,22 @@ export default function SettingsPage() {
           Trafic real din analytics: sesiuni organice ca bază pentru estimare (crește încrederea) și
           un panou cu traficul real.
         </p>
+        {site.ga4Connected && !site.ga4Property && (
+          <p className="mt-2 text-sm text-[var(--warn)]">
+            Cont Google conectat, dar nu am găsit încă o proprietate GA4 accesibilă. Verifică în{' '}
+            <a
+              href="https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Google Cloud
+            </a>{' '}
+            că „Google Analytics Admin API” și „Google Analytics Data API” sunt activate, și că
+            adresa conectată are acces la o proprietate GA4. Se reîncearcă automat la prima citire de
+            trafic.
+          </p>
+        )}
         {connectGa.isError && (
           <p className="mt-2 text-sm text-[var(--warn)]">{(connectGa.error as Error).message}</p>
         )}
