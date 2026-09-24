@@ -6,6 +6,7 @@ import {
   useBuildPrompt,
   useContent,
   useDiscardDraft,
+  useMarkPublished,
   usePublishArticle,
   useSaveArticle,
   useStartContent,
@@ -14,6 +15,7 @@ import {
   type ContentDraft,
 } from '@/lib/content';
 import { useSite } from '@/lib/queries';
+import { useVerifyStep } from '@/lib/insights';
 import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Skeleton } from '@/components/ui';
 
 const PHASE_LABEL: Record<number, string> = { 30: 'Primele 30 de zile', 60: 'Zilele 30–60', 90: 'Zilele 60–90' };
@@ -79,9 +81,10 @@ export default function ArticlesPage() {
 
       {!site?.wpSiteUrl && (
         <Card>
-          <p className="text-sm text-[var(--warn)]">
-            Conectează WordPress în Setări ca să publicăm articolele. Poți pregăti prompturile și
-            acum.
+          <p className="text-sm text-[var(--text-muted)]">
+            Fără WordPress conectat: publici articolul tu, pe site-ul tău (Markdown sau HTML
+            convertit), apoi lipești aici URL-ul live — îl marcăm publicat și îl urmărim la fel
+            ca un articol publicat automat.
           </p>
         </Card>
       )}
@@ -181,10 +184,15 @@ function ArticleCard({
   const save = useSaveArticle(siteId);
   const verifyM = useVerifyArticle(siteId);
   const publish = usePublishArticle(siteId);
+  const markPublished = useMarkPublished(siteId);
+  const verifyStep = useVerifyStep(siteId);
   const discard = useDiscardDraft(siteId);
   const [article, setArticle] = useState(draft.articleMd ?? '');
   const [copied, setCopied] = useState(false);
+  const [mdCopied, setMdCopied] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [liveUrl, setLiveUrl] = useState('');
+  const [liveCheck, setLiveCheck] = useState<boolean | null>(null);
 
   const verdict = draft.verify;
 
@@ -202,6 +210,24 @@ function ArticleCard({
     } catch {
       setShowPrompt(true);
     }
+  }
+
+  async function copyMarkdown() {
+    try {
+      await navigator.clipboard.writeText(article);
+      setMdCopied(true);
+      setTimeout(() => setMdCopied(false), 2000);
+    } catch {
+      /* the text is already visible in the textarea */
+    }
+  }
+
+  async function checkLiveUrl() {
+    if (!liveUrl.trim()) return;
+    setLiveCheck(null);
+    const kw = (draft.title ?? '').toLowerCase();
+    const r = await verifyStep.mutateAsync({ url: liveUrl.trim(), check: 'title_contains', value: kw });
+    setLiveCheck(r.pass);
   }
 
   return (
@@ -311,28 +337,36 @@ function ArticleCard({
                 Verifică din nou
               </Button>
             )}
-            <Button
-              size="sm"
-              loading={publish.isPending}
-              disabled={!wpConnected || !article.trim() || (verdict ? !verdict.pass : true)}
-              onClick={async () => {
-                if (article !== draft.articleMd) await save.mutateAsync({ id: draft.id, articleMd: article });
-                publish.mutate({ id: draft.id });
-              }}
-            >
-              Publică pe blog
-            </Button>
-            {verdict && !verdict.pass && (
-              <Button
-                size="sm"
-                variant="ghost"
-                loading={publish.isPending}
-                onClick={async () => {
-                  if (article !== draft.articleMd) await save.mutateAsync({ id: draft.id, articleMd: article });
-                  publish.mutate({ id: draft.id, force: true });
-                }}
-              >
-                Publică oricum
+            {wpConnected ? (
+              <>
+                <Button
+                  size="sm"
+                  loading={publish.isPending}
+                  disabled={!article.trim() || (verdict ? !verdict.pass : true)}
+                  onClick={async () => {
+                    if (article !== draft.articleMd) await save.mutateAsync({ id: draft.id, articleMd: article });
+                    publish.mutate({ id: draft.id });
+                  }}
+                >
+                  Publică pe blog
+                </Button>
+                {verdict && !verdict.pass && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={publish.isPending}
+                    onClick={async () => {
+                      if (article !== draft.articleMd) await save.mutateAsync({ id: draft.id, articleMd: article });
+                      publish.mutate({ id: draft.id, force: true });
+                    }}
+                  >
+                    Publică oricum
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={copyMarkdown} disabled={!article.trim()}>
+                {mdCopied ? '✓ Markdown copiat' : 'Copiază Markdown'}
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={() => discard.mutate(draft.id)}>
@@ -342,6 +376,46 @@ function ArticleCard({
 
           {publish.isError && (
             <p className="mt-2 text-sm text-[var(--bad)]">{(publish.error as Error).message}</p>
+          )}
+
+          {!wpConnected && (
+            <div className="mt-3 rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
+              <div className="text-xs text-[var(--text-muted)]">
+                Publică articolul tu, pe site-ul tău, apoi lipește URL-ul live:
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  value={liveUrl}
+                  onChange={(e) => setLiveUrl(e.target.value)}
+                  placeholder="https://site-ul-tau.ro/blog/articol"
+                  className="min-w-[240px] flex-1 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-transparent px-2 py-1.5 text-sm"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={verifyStep.isPending}
+                  disabled={!liveUrl.trim()}
+                  onClick={checkLiveUrl}
+                >
+                  Verifică
+                </Button>
+                <Button
+                  size="sm"
+                  loading={markPublished.isPending}
+                  disabled={!liveUrl.trim()}
+                  onClick={() => markPublished.mutate({ id: draft.id, url: liveUrl.trim() })}
+                >
+                  Marchează publicat
+                </Button>
+              </div>
+              {liveCheck != null && (
+                <p className={`mt-2 text-xs ${liveCheck ? 'text-[var(--good)]' : 'text-[var(--warn)]'}`}>
+                  {liveCheck
+                    ? '✓ Pagina live conține cuvântul cheie în title.'
+                    : '✕ Nu am găsit cuvântul cheie în title-ul paginii live.'}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}

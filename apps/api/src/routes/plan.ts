@@ -230,48 +230,54 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
       if (!rec) return reply.code(409).send({ error: 'blueprint has no recommendation yet' });
 
       const creds = await loadWpCreds(bp.siteId);
-      if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
 
-      const obj = await wordpress.resolveObject(creds, bp.url);
-      if (!obj) return reply.code(422).send({ error: 'could not resolve the WordPress object for this URL' });
-      const conn = await wordpress.testConnection(creds);
+      let appliedResult: Record<string, unknown>;
+      if (creds) {
+        const obj = await wordpress.resolveObject(creds, bp.url);
+        if (!obj) return reply.code(422).send({ error: 'could not resolve the WordPress object for this URL' });
+        const conn = await wordpress.testConnection(creds);
 
-      const result = await wordpress.applyFix(creds, {
-        kind: 'meta',
-        objectType: obj.type,
-        objectId: obj.id,
-        seoPlugin: conn.seoPlugin,
-        metaTitle: rec.title,
-        metaDescription: rec.metaDescription,
-      });
-      if (!result.applied) {
-        return reply.code(502).send({ error: 'WordPress rejected the change', detail: result.reason });
+        const result = await wordpress.applyFix(creds, {
+          kind: 'meta',
+          objectType: obj.type,
+          objectId: obj.id,
+          seoPlugin: conn.seoPlugin,
+          metaTitle: rec.title,
+          metaDescription: rec.metaDescription,
+        });
+        if (!result.applied) {
+          return reply.code(502).send({ error: 'WordPress rejected the change', detail: result.reason });
+        }
+        appliedResult = { kind: 'meta', objectType: obj.type, objectId: obj.id, previous: result.previous };
+      } else {
+        // No WordPress connection (universal / custom-built site) — the user applies the
+        // title/meta themselves (copy-paste) and confirms here. Same tracking as a WP
+        // apply, just no write happened through us — `previous` keeps the pre-change
+        // values so the card can still show "was X, now Y" and a manual "undo" is just
+        // flipping the status back.
+        appliedResult = {
+          kind: 'manual',
+          previous: { title: bp.current?.title ?? null, metaDescription: null },
+        };
       }
 
       const [updated] = await db
         .update(pageBlueprints)
-        .set({
-          status: 'applied',
-          appliedResult: {
-            kind: 'meta',
-            objectType: obj.type,
-            objectId: obj.id,
-            previous: result.previous,
-          },
-          updatedAt: new Date(),
-        })
+        .set({ status: 'applied', appliedResult, updatedAt: new Date() })
         .where(eq(pageBlueprints.id, bp.id))
         .returning();
-      await recordAudit(req.userId!, 'blueprint.apply', bp.siteId, { url: bp.url });
+      await recordAudit(req.userId!, creds ? 'blueprint.apply' : 'blueprint.apply_manual', bp.siteId, {
+        url: bp.url,
+      });
       await recordIntervention({
         siteId: bp.siteId,
         kind: 'blueprint',
         category: 'onpage',
         targetUrl: bp.url,
         targetKeywordId: bp.targetKeywordId,
-        label: `Blueprint aplicat: ${bp.targetKeyword ?? bp.url}`,
+        label: `Blueprint aplicat${creds ? '' : ' (manual)'}: ${bp.targetKeyword ?? bp.url}`,
       });
-      return { blueprint: updated };
+      return { blueprint: updated, manual: !creds };
     },
   );
 
@@ -280,14 +286,20 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
     const bp = await ownedBlueprint(req.userId!, req.params.bpId);
     if (!bp) return reply.code(404).send({ error: 'not found' });
     const saved = bp.appliedResult as
-      | { kind: 'meta'; objectType?: 'post' | 'page'; objectId?: number; previous: Record<string, unknown> }
+      | { kind: 'meta' | 'manual'; objectType?: 'post' | 'page'; objectId?: number; previous: Record<string, unknown> }
       | null;
     if (bp.status !== 'applied' || !saved) return reply.code(409).send({ error: 'nothing to roll back' });
 
-    const creds = await loadWpCreds(bp.siteId);
-    if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
-    const { applied } = await wordpress.rollbackFix(creds, saved);
-    if (!applied) return reply.code(502).send({ error: 'rollback failed' });
+    if (saved.kind === 'meta') {
+      const creds = await loadWpCreds(bp.siteId);
+      if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
+      const { applied } = await wordpress.rollbackFix(
+        creds,
+        saved as Parameters<typeof wordpress.rollbackFix>[1],
+      );
+      if (!applied) return reply.code(502).send({ error: 'rollback failed' });
+    }
+    // kind 'manual' — nothing was written through us, so "rollback" is just un-marking it.
 
     const [updated] = await db
       .update(pageBlueprints)

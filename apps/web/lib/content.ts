@@ -142,6 +142,23 @@ export function usePublishArticle(siteId: string) {
   });
 }
 
+export function useMarkPublished(siteId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; url: string }) =>
+      apiFetch<{ draft: ContentDraft }>(`/api/content/${vars.id}/mark-published`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ url: vars.url }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['content', siteId] });
+      pushToast('Marcat ca publicat.', 'success');
+    },
+  });
+}
+
 export function useDiscardDraft(siteId: string) {
   const token = useToken();
   const qc = useQueryClient();

@@ -76,62 +76,70 @@ export async function recommendationRoutes(app: FastifyInstance): Promise<void> 
     if (!ctx) return reply.code(404).send({ error: 'not found' });
     if (!ctx.reco.autoFixable) return reply.code(422).send({ error: 'recommendation is not auto-fixable' });
 
-    const creds = await loadWpCreds(ctx.siteId);
-    if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
-
-    let target: wordpress.FixTarget;
-    let saveTarget: Record<string, unknown>;
-
-    if (META_RULES.has(ctx.ruleId)) {
-      if (parsed.data.metaTitle === undefined && parsed.data.metaDescription === undefined) {
-        return reply.code(400).send({ error: 'metaTitle or metaDescription is required' });
-      }
-      const obj = await wordpress.resolveObject(creds, ctx.pageUrl);
-      if (!obj) return reply.code(422).send({ error: 'could not resolve the WordPress object for this URL' });
-      const conn = await wordpress.testConnection(creds);
-      target = {
-        kind: 'meta',
-        objectType: obj.type,
-        objectId: obj.id,
-        seoPlugin: conn.seoPlugin,
-        metaTitle: parsed.data.metaTitle,
-        metaDescription: parsed.data.metaDescription,
-      };
-      saveTarget = { kind: 'meta', objectType: obj.type, objectId: obj.id };
-    } else if (ctx.ruleId === 'onpage.image-alt') {
-      if (!parsed.data.mediaId || parsed.data.altText === undefined) {
-        return reply.code(400).send({ error: 'mediaId and altText are required for alt-text fixes' });
-      }
-      target = { kind: 'alt', mediaId: parsed.data.mediaId, altText: parsed.data.altText };
-      saveTarget = { kind: 'alt', mediaId: parsed.data.mediaId };
-    } else {
-      return reply.code(422).send({ error: `auto-apply not supported for rule ${ctx.ruleId}` });
+    const isMeta = META_RULES.has(ctx.ruleId);
+    const isAlt = ctx.ruleId === 'onpage.image-alt';
+    if (!isMeta && !isAlt) {
+      return reply.code(422).send({ error: `apply not supported for rule ${ctx.ruleId}` });
     }
 
-    const result = await wordpress.applyFix(creds, target);
-    if (!result.applied) {
-      return reply.code(502).send({ error: 'WordPress rejected the change', detail: result.reason });
+    const creds = await loadWpCreds(ctx.siteId);
+    let appliedResult: Record<string, unknown>;
+
+    if (creds) {
+      // Values are only required when we're the ones writing them.
+      if (isMeta && parsed.data.metaTitle === undefined && parsed.data.metaDescription === undefined) {
+        return reply.code(400).send({ error: 'metaTitle or metaDescription is required' });
+      }
+      if (isAlt && (!parsed.data.mediaId || parsed.data.altText === undefined)) {
+        return reply.code(400).send({ error: 'mediaId and altText are required for alt-text fixes' });
+      }
+      let target: wordpress.FixTarget;
+      let saveTarget: Record<string, unknown>;
+      if (isMeta) {
+        const obj = await wordpress.resolveObject(creds, ctx.pageUrl);
+        if (!obj) return reply.code(422).send({ error: 'could not resolve the WordPress object for this URL' });
+        const conn = await wordpress.testConnection(creds);
+        target = {
+          kind: 'meta',
+          objectType: obj.type,
+          objectId: obj.id,
+          seoPlugin: conn.seoPlugin,
+          metaTitle: parsed.data.metaTitle,
+          metaDescription: parsed.data.metaDescription,
+        };
+        saveTarget = { kind: 'meta', objectType: obj.type, objectId: obj.id };
+      } else {
+        target = { kind: 'alt', mediaId: parsed.data.mediaId!, altText: parsed.data.altText! };
+        saveTarget = { kind: 'alt', mediaId: parsed.data.mediaId };
+      }
+      const result = await wordpress.applyFix(creds, target);
+      if (!result.applied) {
+        return reply.code(502).send({ error: 'WordPress rejected the change', detail: result.reason });
+      }
+      appliedResult = { ...saveTarget, previous: result.previous };
+    } else {
+      // No WordPress connection (universal / custom-built site) — the user makes the
+      // change themselves and confirms it here. Tracked identically to a WP apply.
+      appliedResult = { kind: 'manual', previous: {} };
     }
 
     const [updated] = await db
       .update(recommendations)
-      .set({
-        applied: true,
-        appliedAt: new Date(),
-        appliedResult: { ...saveTarget, previous: result.previous },
-      })
+      .set({ applied: true, appliedAt: new Date(), appliedResult })
       .where(eq(recommendations.id, ctx.reco.id))
       .returning();
 
-    await recordAudit(req.userId!, 'recommendation.apply', ctx.reco.id, { ruleId: ctx.ruleId });
+    await recordAudit(req.userId!, creds ? 'recommendation.apply' : 'recommendation.apply_manual', ctx.reco.id, {
+      ruleId: ctx.ruleId,
+    });
     await recordIntervention({
       siteId: ctx.siteId,
       kind: 'recommendation',
       category: ctx.ruleId,
       targetUrl: ctx.pageUrl,
-      label: `Fix aplicat: ${ctx.reco.fixTitle}`,
+      label: `Fix aplicat${creds ? '' : ' (manual)'}: ${ctx.reco.fixTitle}`,
     });
-    return { applied: true, recommendation: updated };
+    return { applied: true, recommendation: updated, manual: !creds };
   });
 
   // POST /api/recommendations/:id/rollback — Epic 6.6
@@ -141,12 +149,17 @@ export async function recommendationRoutes(app: FastifyInstance): Promise<void> 
     if (!ctx.reco.applied || !ctx.reco.appliedResult) {
       return reply.code(409).send({ error: 'nothing to roll back' });
     }
-    const creds = await loadWpCreds(ctx.siteId);
-    if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
-
-    const saved = ctx.reco.appliedResult as Parameters<typeof wordpress.rollbackFix>[1];
-    const { applied } = await wordpress.rollbackFix(creds, saved);
-    if (!applied) return reply.code(502).send({ error: 'rollback failed' });
+    const saved = ctx.reco.appliedResult as { kind: string } & Record<string, unknown>;
+    if (saved.kind !== 'manual') {
+      const creds = await loadWpCreds(ctx.siteId);
+      if (!creds) return reply.code(409).send({ error: 'site is not connected to WordPress' });
+      const { applied } = await wordpress.rollbackFix(
+        creds,
+        saved as Parameters<typeof wordpress.rollbackFix>[1],
+      );
+      if (!applied) return reply.code(502).send({ error: 'rollback failed' });
+    }
+    // kind 'manual' — nothing was written through us, so "rollback" is just un-marking it.
 
     const [updated] = await db
       .update(recommendations)

@@ -21,9 +21,11 @@ export function RecommendationCard({
   const [mediaId, setMediaId] = useState('');
   const [altText, setAltText] = useState('');
 
-  const canAuto = reco.autoFixable && wpConnected;
   const isMeta = META_RULES.has(ruleId);
   const isAlt = ruleId === 'onpage.image-alt';
+  // These are the only rule kinds the apply endpoint knows how to act on — with or
+  // without WordPress. Everything else stays prose-only guidance ("manual").
+  const actionable = reco.autoFixable && (isMeta || isAlt);
 
   return (
     <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
@@ -42,8 +44,10 @@ export function RecommendationCard({
           <Button variant="ghost" onClick={() => rollback.mutate(reco.id)}>
             Anulează fix-ul
           </Button>
-        ) : canAuto ? (
-          <Button onClick={() => setOpen(!open)}>Aplică automat</Button>
+        ) : actionable ? (
+          <Button onClick={() => setOpen(!open)}>
+            {wpConnected ? 'Aplică automat' : 'Marchează rezolvat'}
+          </Button>
         ) : (
           <Badge tone="neutral">manual</Badge>
         )}
@@ -57,6 +61,13 @@ export function RecommendationCard({
 
       {open && !reco.applied && (
         <div className="mt-4 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          {!wpConnected && (
+            <p className="text-xs text-neutral-500">
+              Fără WordPress conectat: fă tu schimbarea pe site, apoi confirmă mai jos — se
+              urmărește la fel ca un fix aplicat automat. Câmpurile sunt opționale, doar pentru
+              evidența ta.
+            </p>
+          )}
           {isMeta && (
             <>
               <input
@@ -76,12 +87,14 @@ export function RecommendationCard({
           )}
           {isAlt && (
             <>
-              <input
-                value={mediaId}
-                onChange={(e) => setMediaId(e.target.value)}
-                placeholder="ID media WordPress"
-                className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
-              />
+              {wpConnected && (
+                <input
+                  value={mediaId}
+                  onChange={(e) => setMediaId(e.target.value)}
+                  placeholder="ID media WordPress"
+                  className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
+                />
+              )}
               <input
                 value={altText}
                 onChange={(e) => setAltText(e.target.value)}
@@ -92,17 +105,21 @@ export function RecommendationCard({
           )}
           <div className="flex items-center gap-2">
             <Button
-              disabled={apply.isPending}
+              disabled={apply.isPending || (wpConnected && isAlt && !mediaId)}
               onClick={() =>
                 apply.mutate({
                   id: reco.id,
                   body: isAlt
-                    ? { mediaId: Number(mediaId), altText }
+                    ? { mediaId: mediaId ? Number(mediaId) : undefined, altText: altText || undefined }
                     : { metaTitle: metaTitle || undefined, metaDescription: metaDescription || undefined },
                 })
               }
             >
-              {apply.isPending ? 'Se aplică…' : 'Confirmă și scrie pe site'}
+              {apply.isPending
+                ? 'Se salvează…'
+                : wpConnected
+                  ? 'Confirmă și scrie pe site'
+                  : 'Confirmă ca rezolvat'}
             </Button>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Renunță

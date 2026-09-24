@@ -16,6 +16,7 @@ import {
 } from '@/lib/plan';
 import { useSite } from '@/lib/queries';
 import { useLearnRule } from '@/lib/playbook';
+import { useVerifyStep } from '@/lib/insights';
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from '@/components/ui';
 
 const DIAG: Record<Blueprint['diagnosis'], { label: string; tone: 'good' | 'warning' | 'critical' | 'neutral' }> = {
@@ -289,15 +290,46 @@ function BlueprintCard({
   const promptM = useBlueprintPrompt(siteId);
   const learn = useLearnRule(siteId);
   const revertAgent = useRevertAgentEdits(siteId);
+  const verifyStep = useVerifyStep(siteId);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [verifyResult, setVerifyResult] = useState<{ title: boolean; meta: boolean } | null>(null);
 
   const d = DIAG[bp.diagnosis];
   const rec = bp.recommended;
   const cur = bp.current;
   const pot = bp.potential;
+
+  async function copyCode() {
+    if (!rec) return;
+    const lines = [
+      `<title>${rec.title}</title>`,
+      `<meta name="description" content="${rec.metaDescription}">`,
+      '',
+      `<h1>${rec.h1}</h1>`,
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — the values are already visible as plain text below */
+    }
+  }
+
+  async function runVerify() {
+    setVerifyResult(null);
+    const [titleRes, metaRes] = await Promise.all([
+      bp.targetKeyword
+        ? verifyStep.mutateAsync({ url: bp.url, check: 'title_contains', value: bp.targetKeyword })
+        : Promise.resolve({ pass: true, found: '' }),
+      verifyStep.mutateAsync({ url: bp.url, check: 'meta_length' }),
+    ]);
+    setVerifyResult({ title: titleRes.pass, meta: metaRes.pass });
+  }
 
   async function getPrompt() {
     const p = await promptM.mutateAsync(bp.id);
@@ -454,16 +486,29 @@ function BlueprintCard({
                 Anulează (rollback)
               </Button>
             ) : (
-              <Button
-                size="sm"
-                onClick={() => apply.mutate(bp.id)}
-                disabled={apply.isPending || !wpConnected || !rec}
-              >
-                {apply.isPending ? 'Se aplică…' : 'Aprobă title + meta'}
+              <Button size="sm" onClick={() => apply.mutate(bp.id)} disabled={apply.isPending || !rec}>
+                {apply.isPending
+                  ? 'Se salvează…'
+                  : wpConnected
+                    ? 'Aprobă title + meta'
+                    : 'Marchează aplicat'}
+              </Button>
+            )}
+            {rec && (
+              <Button size="sm" variant="ghost" onClick={copyCode}>
+                {codeCopied ? '✓ Cod copiat' : 'Copiază codul'}
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={getPrompt} disabled={promptM.isPending}>
               {copied ? '✓ Prompt copiat' : 'Copiază prompt de rescriere'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={verifyStep.isPending}
+              onClick={runVerify}
+            >
+              Verifică pe site
             </Button>
             <Button
               size="sm"
@@ -476,6 +521,18 @@ function BlueprintCard({
               Renunță
             </Button>
           </div>
+
+          {verifyResult && (
+            <p className="text-xs">
+              <span className={verifyResult.title ? 'text-[var(--good)]' : 'text-[var(--warn)]'}>
+                {verifyResult.title ? '✓' : '✕'} title conține cuvântul cheie
+              </span>
+              {' · '}
+              <span className={verifyResult.meta ? 'text-[var(--good)]' : 'text-[var(--warn)]'}>
+                {verifyResult.meta ? '✓' : '✕'} meta description 120–160 car.
+              </span>
+            </p>
+          )}
 
           {correcting && (
             <div className="rounded-[var(--radius-sm)] border border-[var(--border)] p-3">
@@ -525,9 +582,10 @@ function BlueprintCard({
               </div>
             </div>
           )}
-          {!wpConnected && (
+          {!wpConnected && bp.status !== 'applied' && (
             <p className="text-xs text-[var(--text-faint)]">
-              Conectează WordPress în Setări ca să aplici title + meta cu un clic.
+              Fără WordPress conectat: copiază codul, aplică-l tu în site, apoi „Verifică pe
+              site” sau „Marchează aplicat”.
             </p>
           )}
           {apply.isError && (

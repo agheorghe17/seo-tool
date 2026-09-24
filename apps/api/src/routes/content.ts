@@ -500,4 +500,36 @@ export async function contentRoutes(app: FastifyInstance): Promise<void> {
       .returning();
     return { draft: row };
   });
+
+  // POST /api/content/:id/mark-published — for a universal/custom-built site: the user
+  // publishes the article themselves (their own CMS/static site) and confirms the live
+  // URL here. Tracked identically to an auto-published article, just no WP write.
+  app.post<{ Params: { id: string } }>('/api/content/:id/mark-published', async (req, reply) => {
+    const draft = await ownedDraft(req.userId!, req.params.id);
+    if (!draft) return reply.code(404).send({ error: 'not found' });
+    const parsed = z.object({ url: z.string().url() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+
+    const [row] = await db
+      .update(contentDrafts)
+      .set({
+        status: 'published',
+        wpLink: parsed.data.url,
+        autoPublished: false,
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(contentDrafts.id, draft.id))
+      .returning();
+    await recordAudit(req.userId!, 'content.publish_manual', draft.siteId, { url: parsed.data.url });
+    await recordIntervention({
+      siteId: draft.siteId,
+      kind: 'content',
+      category: 'content',
+      targetKeywordId: draft.keywordId,
+      targetUrl: parsed.data.url,
+      label: `Articol publicat manual: ${draft.title ?? ''}`.trim(),
+    });
+    return { draft: row };
+  });
 }
