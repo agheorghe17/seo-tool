@@ -84,6 +84,12 @@ pnpm workspace links. `packages/shared` este sursa de adevăr pentru tipuri.
   (`recommendations.applied_result_json`). Articolele de blog se publică **live** (`wordpress.publishPost`)
   doar dacă trec `strategy.checkArticle` (`verify.pass`) sau `?force`; publicarea automată la `PUT` cere
   `business_profiles.auto_publish_blog`. Linkurile interne și 301-urile rămân **plan**, nu se scriu automat.
+- **Site-uri „universal" (non-WordPress)**: aceleași acțiuni (apply pe recomandare/blueprint, publicare
+  articol) au un al doilea braț fără scriere prin WP — `appliedResult.kind: 'manual'` — userul face
+  schimbarea el însuși (cod copiat / markdown / URL live lipit), confirmă, iar `recordIntervention` +
+  tracking-ul rămân identice cu calea WP. `GET/POST /api/sites/:id/verify-step` (agnostic de tip site,
+  `apps/api/src/routes/insights.ts`) re-citește pagina live ca să confirme schimbarea. Rollback pe un
+  entry `manual` doar resetează statusul (nimic scris extern de anulat).
 - **Secretele site-urilor** (WP Application Password, GSC refresh token) se stochează criptate în `site_secrets`
   prin `encryptSecret` / `decryptSecret` din `packages/shared`. Nu loga niciodată valorile decriptate.
 - **RLS** este activat pe toate tabelele cu `user_id`. `SUPABASE_SERVICE_ROLE_KEY` doar pe server (api / worker).
