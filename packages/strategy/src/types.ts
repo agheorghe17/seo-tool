@@ -34,4 +34,7 @@ export interface PageLike {
   wordCount: number;
   schemaTypes: string[];
   slug?: string | null;
+  /** Body copy (Epic 23 crawler capture). When present, target-keyword fit reads it
+   * too — not just title/H1/slug. */
+  mainText?: string | null;
 }

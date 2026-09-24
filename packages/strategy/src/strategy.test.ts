@@ -222,6 +222,32 @@ describe('assignPageTargets', () => {
     expect(res[0]!.targetKeywordId).toBeNull();
   });
 
+  it('matches a page to its target keyword via H2/body content even when title/H1 are generic', () => {
+    // Before the on-page fit fix, this page had zero overlap on title+H1+slug alone
+    // and would have come back "no_target" despite the body clearly being about it.
+    const pages: PageLike[] = [
+      {
+        url: 'https://x.ro/blog/articol-nou',
+        title: 'Bine ai venit',
+        h1: 'Bine ai venit',
+        headings: [
+          { level: 2, text: 'Canapele extensibile moderne' },
+          { level: 2, text: 'De ce sa alegi canapele extensibile' },
+        ],
+        wordCount: 900,
+        schemaTypes: [],
+        mainText:
+          'Descopera colectia noastra de canapele extensibile moderne pentru living. ' +
+          'Canapele extensibile sunt alegerea ideala pentru familii care vor confort si stil. ' +
+          'Canapele extensibile ofera flexibilitate maxima acasa.',
+      },
+    ];
+    const kws = [kw('k1', 'canapele extensibile', { businessRelevance: 85, searchVolume: 1200 })];
+    const res = assignPageTargets(pages, kws);
+    expect(res[0]!.targetKeywordId).toBe('k1');
+    expect(res[0]!.diagnosis).toBe('ok');
+  });
+
   it('prefers the local head term for the homepage when localEmphasis + primaryCity', () => {
     const pages = [page('https://x.ro/', 'x.ro')];
     const kws = [

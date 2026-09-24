@@ -104,9 +104,8 @@ function candidatePhrases(text: string, maxN = 4): Set<string> {
   return out;
 }
 
-/** Exact-sequence occurrence count of `phrase` inside `text` (order-sensitive). */
-function countPhraseIn(text: string, phrase: string): number {
-  const words = rawWords(text);
+/** Exact-sequence occurrence count of `phrase` inside pre-split `words` (order-sensitive). */
+function countPhraseInWords(words: string[], phrase: string): number {
   const p = rawWords(phrase);
   if (p.length === 0 || words.length < p.length) return 0;
   let n = 0;
@@ -123,6 +122,11 @@ function countPhraseIn(text: string, phrase: string): number {
   return n;
 }
 
+/** Exact-sequence occurrence count of `phrase` inside `text` (order-sensitive). */
+function countPhraseIn(text: string, phrase: string): number {
+  return countPhraseInWords(rawWords(text), phrase);
+}
+
 function lengthStatus(len: number, min: number, max: number): LengthStatus {
   if (len === 0) return 'missing';
   if (len < min) return 'short';
@@ -133,45 +137,107 @@ function lengthStatus(len: number, min: number, max: number): LengthStatus {
 const ZONE_WEIGHT = { h1: 5, title: 4, h2: 3, url: 2.5, intro: 2, body: 1 } as const;
 const INTRO_WORDS = 60;
 
-export function analyzeOnPage(page: OnPageInput, opts: AnalyzeOnPageOpts = {}): OnPageAnalysis {
+export interface Zone {
+  key: keyof typeof ZONE_WEIGHT;
+  /** Pre-split so scoring many candidate phrases against the same page doesn't
+   * re-tokenize the (potentially several-thousand-word) body text every time. */
+  words: string[];
+  occCap: number;
+}
+
+interface ZonePageInput {
+  title?: string | null;
+  h1?: string | null;
+  headings: { level: number; text: string }[];
+  url: string;
+  mainText?: string | null;
+}
+
+function buildZones(page: ZonePageInput): { zones: Zone[]; fullCorpus: string } {
   const title = page.title ?? '';
   const titleCore = title.split(/[|\-–—:·]/)[0]?.trim() ?? title;
   const h1 = page.h1 ?? '';
-  const h2s = page.headings.filter((h) => h.level === 2 || h.level === 3).map((h) => h.text);
-  const h2Text = h2s.join('. ');
-  const url = slugWords(page.url);
-  const body = page.mainText ?? '';
-  const bodyWords = rawWords(body);
-  const intro = bodyWords.slice(0, INTRO_WORDS).join(' ');
-  const rest = bodyWords.slice(INTRO_WORDS).join(' ');
+  const h2Text = page.headings
+    .filter((h) => h.level === 2 || h.level === 3)
+    .map((h) => h.text)
+    .join('. ');
+  const bodyWords = rawWords(page.mainText ?? '');
+  const introWords = bodyWords.slice(0, INTRO_WORDS);
+  const restWords = bodyWords.slice(INTRO_WORDS);
 
-  const zones: { key: keyof typeof ZONE_WEIGHT; text: string; occCap: number }[] = [
-    { key: 'h1', text: h1, occCap: 3 },
-    { key: 'title', text: titleCore, occCap: 3 },
-    { key: 'h2', text: h2Text, occCap: 6 },
-    { key: 'url', text: url, occCap: 2 },
-    { key: 'intro', text: intro, occCap: 3 },
-    { key: 'body', text: rest, occCap: 12 },
+  const zones: Zone[] = [
+    { key: 'h1', words: rawWords(h1), occCap: 3 },
+    { key: 'title', words: rawWords(titleCore), occCap: 3 },
+    { key: 'h2', words: rawWords(h2Text), occCap: 6 },
+    { key: 'url', words: rawWords(slugWords(page.url)), occCap: 2 },
+    { key: 'intro', words: introWords, occCap: 3 },
+    { key: 'body', words: restWords, occCap: 12 },
   ];
+  // Candidates need everywhere real copy lives — title/H1/H2 alone are too thin.
+  const fullCorpus = [title, h1, h2Text, page.mainText ?? ''].filter(Boolean).join('. ');
+  return { zones, fullCorpus };
+}
 
-  // Candidates from everywhere real copy lives — title/H1/H2 alone are too thin.
-  const fullCorpus = [title, h1, h2Text, body].filter(Boolean).join('. ');
+function zoneScore(
+  zones: Zone[],
+  phrase: string,
+): { score: number; foundIn: RankedKeyword['foundIn'] } {
+  let score = 0;
+  const foundIn = { h1: false, h2: false, title: false, url: false, intro: false, body: false };
+  for (const z of zones) {
+    const occ = countPhraseInWords(z.words, phrase);
+    if (occ > 0) {
+      foundIn[z.key] = true;
+      score += ZONE_WEIGHT[z.key] * Math.min(occ, z.occCap);
+    }
+  }
+  return { score, foundIn };
+}
+
+/**
+ * Precompute a page's zone texts once, then score many candidate keywords against it
+ * cheaply (`zoneFitScore`) — use this instead of `pageKeywordFit` in a loop over many
+ * keywords per page (e.g. `assignPageTargets`), which would otherwise re-split the same
+ * body text on every call.
+ */
+export interface PageZoneIndex {
+  zones: Zone[];
+}
+export function indexPageZones(page: ZonePageInput): PageZoneIndex {
+  return { zones: buildZones(page).zones };
+}
+
+/** Calibrated so "found in H1 + title + one H2 mention" (5+4+3=12) reads as a strong fit;
+ * a couple of lone body mentions (1-3) reads as a weak one. */
+export function zoneFitScore(index: PageZoneIndex, keyword: string): number {
+  const { score } = zoneScore(index.zones, keyword);
+  return Math.max(0, Math.min(1, score / 14));
+}
+
+/**
+ * How well an ARBITRARY keyword fits a page's actual content — H1 > Title > H2 > URL >
+ * intro > body, same weighting as `analyzeOnPage`. For a one-off check; prefer
+ * `indexPageZones` + `zoneFitScore` when scoring many keywords against the same page.
+ * 0..1. A page with no headings/body text (nothing to read beyond title) simply scores
+ * low here — callers should blend with a title/slug-only fallback rather than replace
+ * it, so behaviour never regresses for thin pages.
+ */
+export function pageKeywordFit(page: ZonePageInput, keyword: string): number {
+  return zoneFitScore(indexPageZones(page), keyword);
+}
+
+export function analyzeOnPage(page: OnPageInput, opts: AnalyzeOnPageOpts = {}): OnPageAnalysis {
+  const title = page.title ?? '';
+  const h1 = page.h1 ?? '';
+  const { zones, fullCorpus } = buildZones(page);
+
   const candidates = candidatePhrases(fullCorpus, 4);
 
   const ranked: RankedKeyword[] = [];
   for (const phrase of candidates) {
-    let score = 0;
-    let totalOcc = 0;
-    const foundIn = { h1: false, h2: false, title: false, url: false, intro: false, body: false };
-    for (const z of zones) {
-      const occ = countPhraseIn(z.text, phrase);
-      if (occ > 0) {
-        foundIn[z.key] = true;
-        score += ZONE_WEIGHT[z.key] * Math.min(occ, z.occCap);
-      }
-    }
+    const { score, foundIn } = zoneScore(zones, phrase);
     // Total occurrences from one canonical corpus (title+H1+H2+body) — no double counting.
-    totalOcc = countPhraseIn(fullCorpus, phrase);
+    const totalOcc = countPhraseIn(fullCorpus, phrase);
     // Drop one-off noise unless it's a strong positional signal (H1/title).
     if (totalOcc < 2 && !foundIn.h1 && !foundIn.title) continue;
     if (score <= 0) continue;

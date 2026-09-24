@@ -1,5 +1,6 @@
 import type { KeywordInput, PageLike } from './types.js';
 import { normalize, slugFromUrl, tokenSimilarity, tokens } from './text.js';
+import { indexPageZones, zoneFitScore } from './onpage-keywords.js';
 
 /**
  * Epic 22 — assign each of the site's own pages the keyword it should own, and flag
@@ -83,9 +84,19 @@ export function assignPageTargets(
   const city = opts.primaryCity ? normalize(opts.primaryCity) : null;
   const cityToks = city ? new Set(tokens(city)) : new Set<string>();
 
-  // Precompute fit(page, keyword) for every pair.
+  // Precompute fit(page, keyword) for every pair. Blends two signals and takes the max
+  // (never regresses a page that already fit on title/H1/slug alone):
+  //  - the original title+H1+slug token overlap (works even with no crawled body text)
+  //  - real H1>Title>H2>URL>intro>body weighted occurrence fit, when mainText/headings
+  //    are available (Phase 5 — a keyword that only lives in H2s/body copy now counts).
   const hay = new Map(pages.map((p) => [p.url, pageHaystack(p)]));
-  const fitOf = (url: string, kw: string) => tokenSimilarity(kw, hay.get(url) ?? '');
+  const zonesByUrl = new Map(pages.map((p) => [p.url, indexPageZones(p)]));
+  const fitOf = (url: string, kw: string) => {
+    const base = tokenSimilarity(kw, hay.get(url) ?? '');
+    const idx = zonesByUrl.get(url);
+    const rich = idx ? zoneFitScore(idx, kw) : 0;
+    return Math.max(base, rich);
+  };
 
   const floor = opts.minRelevance ?? 0;
   const pairs: { url: string; kwId: string; kw: string; fit: number; score: number }[] = [];

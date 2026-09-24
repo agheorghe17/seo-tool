@@ -131,6 +131,7 @@ export async function handlePagePlan(job: PgBoss.Job<SiteJob>, boss: PgBoss): Pr
         (x): x is string => typeof x === 'string',
       ),
       metaLen: (p.metaDescription ?? '').length,
+      mainText: p.mainText,
     }));
   const pageById = new Map(ownPages.map((p) => [p.url, p]));
 
