@@ -13,6 +13,7 @@ import { resolveCannibalization } from './cannibalization.js';
 import { recommendArchitecture } from './architecture.js';
 import { planBlogArticles } from './blog-plan.js';
 import { checkArticle } from './article-check.js';
+import { analyzeOnPage } from './onpage-keywords.js';
 import type { PageLike } from './types.js';
 
 const fakeClicks = (v: number, pos: number) => Math.round((v * Math.max(0.01, 0.3 / pos)) * 10) / 10;
@@ -395,5 +396,84 @@ describe('checkArticle', () => {
     );
     const v = checkArticle(md, { keyword: 'google ads', linkTo: 'https://x.ro/', targetWords: 120 });
     expect(v.checks.find((c) => c.id === 'link_pillar')!.status).toBe('pass');
+  });
+});
+
+describe('analyzeOnPage', () => {
+  const page = {
+    url: 'https://x.ro/canapele-extensibile',
+    title: 'Canapele extensibile moderne pentru living si dormitor la preturi excelente azi',
+    metaDescription: 'Scurt.',
+    h1: 'Canapele extensibile moderne',
+    headings: [
+      { level: 1, text: 'Canapele extensibile moderne' },
+      { level: 2, text: 'Canapele extensibile 3 locuri' },
+      { level: 2, text: 'Canapele extensibile cu lada' },
+    ],
+    mainText:
+      'Descopera colectia noastra de canapele extensibile moderne pentru orice living. ' +
+      'Canapele extensibile 3 locuri sunt alegerea ideala pentru familii. ' +
+      'Canapele extensibile cu lada ofera spatiu de depozitare in plus. ' +
+      'O canapea extensibila moderna se potriveste in orice casa. ' +
+      'Alege canapele extensibile pentru confort si stil in fiecare zi acasa.',
+    images: [
+      { src: 'a.jpg', alt: 'canapele extensibile' },
+      { src: 'b.jpg', alt: 'canapele extensibile' },
+      { src: 'c.jpg', alt: null },
+    ],
+  };
+
+  it('ranks the H1/H2-backed phrase above one-off body noise, with real occurrence counts', () => {
+    const a = analyzeOnPage(page);
+    const top = a.keywords[0]!;
+    expect(top.phrase).toBe('canapele extensibile');
+    expect(top.foundIn.h1).toBe(true);
+    expect(top.foundIn.title).toBe(true);
+    expect(top.foundIn.h2).toBe(true);
+    expect(top.occurrences).toBeGreaterThanOrEqual(5);
+    // a sub-variant should also surface
+    expect(a.keywords.map((k) => k.phrase)).toEqual(
+      expect.arrayContaining(['canapele extensibile 3 locuri', 'canapele extensibile cu lada']),
+    );
+    // pure noise (single mention, not in a heading/title) must not outrank it
+    expect(a.keywords.findIndex((k) => k.phrase === 'canapele extensibile')).toBe(0);
+  });
+
+  it('joins search volume from the site keyword universe', () => {
+    const a = analyzeOnPage(page, {
+      volumeByKeyword: new Map([['canapele extensibile', 8100]]),
+    });
+    expect(a.keywords.find((k) => k.phrase === 'canapele extensibile')?.searchVolume).toBe(8100);
+    expect(a.keywords.find((k) => k.phrase === 'canapele extensibile 3 locuri')?.searchVolume).toBeNull();
+  });
+
+  it('audits title/meta length against the same thresholds as the scoring rules (30-60 / 120-160)', () => {
+    const a = analyzeOnPage(page);
+    expect(a.meta.title.lengthStatus).toBe('long'); // fixture title is 79 chars
+    expect(a.meta.metaDescription.lengthStatus).toBe('short'); // "Scurt." is 6 chars
+    expect(a.meta.title.hasPrimaryKeyword).toBe(true);
+    expect(a.meta.title.keywordNearStart).toBe(true);
+  });
+
+  it('audits against an explicit target keyword instead of the self-detected top phrase', () => {
+    const a = analyzeOnPage(page, { targetKeyword: 'canapele cu lada' });
+    expect(a.primaryKeyword).toBe('canapele cu lada');
+    expect(a.meta.h1.hasPrimaryKeyword).toBe(false); // H1 doesn't literally contain this phrase
+  });
+
+  it('flags alt-text keyword stuffing when most images repeat the exact keyword', () => {
+    const a = analyzeOnPage(page);
+    expect(a.meta.altTexts.missingAlt).toBe(1);
+    expect(a.meta.altTexts.stuffingRisk).toBe(true); // 2/3 images share the exact keyword as alt
+    const stuffed = analyzeOnPage({
+      ...page,
+      images: [
+        { src: '1.jpg', alt: 'canapele extensibile' },
+        { src: '2.jpg', alt: 'canapele extensibile' },
+        { src: '3.jpg', alt: 'canapele extensibile' },
+        { src: '4.jpg', alt: null },
+      ],
+    });
+    expect(stuffed.meta.altTexts.stuffingRisk).toBe(true);
   });
 });

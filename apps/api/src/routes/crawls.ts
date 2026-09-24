@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { and, avg, count, desc, eq, sql } from 'drizzle-orm';
-import { crawls, db, issues, pages, sites, users } from 'db';
+import { crawls, db, issues, keywordData, pageBlueprints, pages, sites, users } from 'db';
+import { analyzeOnPage, normalize } from 'strategy';
 import { requireAuth } from '../middleware/auth.js';
 import { recordAudit } from '../lib/audit.js';
 import { enqueue } from '../queue.js';
@@ -133,6 +134,48 @@ export async function crawlRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(pages.id, req.params.id));
     if (!row || row.userId !== req.userId!) return reply.code(404).send({ error: 'not found' });
     return { page: row.page, crawlId: row.crawlId, siteId: row.siteId };
+  });
+
+  // GET /api/pages/:id/keywords — Phase 5: real on-page keyword analysis (H1/H2/body
+  // frequency, weighted by position) + title/meta/alt audit against the assigned target.
+  app.get<{ Params: { id: string } }>('/api/pages/:id/keywords', async (req, reply) => {
+    const [row] = await db
+      .select({ page: pages, userId: sites.userId, siteId: sites.id })
+      .from(pages)
+      .innerJoin(crawls, eq(crawls.id, pages.crawlId))
+      .innerJoin(sites, eq(sites.id, crawls.siteId))
+      .where(eq(pages.id, req.params.id));
+    if (!row || row.userId !== req.userId!) return reply.code(404).send({ error: 'not found' });
+
+    const [kwRows, blueprint] = await Promise.all([
+      db
+        .select({ keyword: keywordData.keyword, searchVolume: keywordData.searchVolume })
+        .from(keywordData)
+        .where(eq(keywordData.siteId, row.siteId)),
+      db
+        .select({ targetKeyword: pageBlueprints.targetKeyword })
+        .from(pageBlueprints)
+        .where(and(eq(pageBlueprints.siteId, row.siteId), eq(pageBlueprints.url, row.page.url)))
+        .limit(1),
+    ]);
+    const volumeByKeyword = new Map<string, number>();
+    for (const k of kwRows) {
+      if (k.searchVolume > 0) volumeByKeyword.set(normalize(k.keyword), k.searchVolume);
+    }
+
+    const analysis = analyzeOnPage(
+      {
+        url: row.page.url,
+        title: row.page.title,
+        metaDescription: row.page.metaDescription,
+        h1: row.page.h1,
+        headings: (row.page.headings as { level: number; text: string }[] | null) ?? [],
+        mainText: row.page.mainText,
+        images: (row.page.images as { src: string; alt: string | null }[] | null) ?? [],
+      },
+      { volumeByKeyword, targetKeyword: blueprint[0]?.targetKeyword ?? null },
+    );
+    return { analysis };
   });
 
   // DELETE /api/crawls/:id — Epic 9.5 (used by the UI): mark failed, stop pending jobs.

@@ -7,6 +7,11 @@ const RO_STOPWORDS = new Set(
   ).split(/\s+/),
 );
 
+/** A word so common it should never start/end a keyword phrase (but may sit inside one). */
+export function isStopword(word: string): boolean {
+  return RO_STOPWORDS.has(word.toLowerCase());
+}
+
 export function normalize(s: string): string {
   return s
     .toLowerCase()

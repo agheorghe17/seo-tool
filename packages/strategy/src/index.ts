@@ -14,3 +14,4 @@ export * from './cannibalization.js';
 export * from './architecture.js';
 export * from './blog-plan.js';
 export * from './article-check.js';
+export * from './onpage-keywords.js';
